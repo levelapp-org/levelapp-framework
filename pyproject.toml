@@ -1,0 +1,23 @@
+[project]
+name = "level-app"
+version = "0.1.0"
+description = "LevalApp is an evaluation framework for AI/LLM-based software application. [Powered by Norma]"
+readme = "README.md"
+authors = [
+    { name = "KadriSof", email = "kadrisofyen@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+level-app = "level_app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.2",
+    "sphinx>=8.2.3",
+]
