@@ -6,9 +6,9 @@ from typing import Any, Dict, List, Tuple, Literal
 
 from pydantic import BaseModel
 
-from levelapp.comparator.metrics import MetricsManager, ComparisonResults
-from levelapp.comparator.schemas import EntityMetric, SetMetric
-from levelapp.comparator.utils import format_evaluation_results
+from ..comparator.metrics import MetricsManager, ComparisonResults
+from ..comparator.schemas import EntityMetric, SetMetric
+from ..comparator.utils import format_evaluation_results
 
 
 class MetadataComparator:
