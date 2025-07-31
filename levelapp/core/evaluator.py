@@ -1,5 +1,6 @@
 """levelapp/core/evaluator.py"""
 import logging
+from functools import lru_cache
 
 from typing import Dict, Any
 
@@ -12,11 +13,13 @@ from tenacity import (
     RetryError,
 )
 
+from levelapp.clients.registry import ClientRegistry
 from levelapp.core.base import BaseEvaluator, BaseChatClient
 
 
 logger = logging.getLogger(__name__)
 
+# TODO-0: Move this to a separate file.
 EVAL_PROMPT_TEMPLATE = """
 Your task is to evaluate how well the agent's generated text matches the expected text.
 Use the following classification criteria:
@@ -42,23 +45,19 @@ Return your evaluation as a valid JSON object with exactly these keys:
 Output only the JSON object and nothing else.
 """
 
-
 class InteractionEvaluator(BaseEvaluator):
     def __init__(self):
-        self.clients: Dict[str, BaseChatClient] = {}
+        self.prompt_template = EVAL_PROMPT_TEMPLATE
 
     def register_client(self, provider: str, client: BaseChatClient):
         self.clients[provider] = client
 
-    @staticmethod
-    def _build_prompt(generated_text: str, reference_text: str) -> str:
-        return EVAL_PROMPT_TEMPLATE.format(generated_text=generated_text, reference_text=reference_text)
-
-    def _get_client(self, provider: str) -> BaseChatClient:
-        try:
-            return self.clients[provider]
-        except KeyError:
-            raise ValueError(f"[InteractionEvaluator] Client for provider '{provider}' is not registered.")
+    @lru_cache(maxsize=1024)
+    def _build_prompt(self, generated_text: str, reference_text: str) -> str:
+        return self.prompt_template.format(
+            generated_text=generated_text,
+            reference_text=reference_text
+        )
 
     @retry(
         retry=retry_if_exception_type((TimeoutError, ValueError, RuntimeError)),
@@ -67,12 +66,13 @@ class InteractionEvaluator(BaseEvaluator):
         reraise=True,
     )
     def evaluate(self, provider: str, generated_text: str, reference_text: str) -> Dict[str, Any]:
-        prompt = self._build_prompt(generated_text, reference_text)
-        client = self._get_client(provider)
+        prompt = self._build_prompt(generated_text=generated_text, reference_text=reference_text)
+        client = ClientRegistry.get(provider=provider)
 
         try:
             response = client.call(message=prompt)
             logger.info(f"[{provider}] Evaluation: {response}")
+            # TODO-2: Validate response structure using Pydantic or similar.
             return response
 
         except Exception as e:
@@ -81,7 +81,7 @@ class InteractionEvaluator(BaseEvaluator):
 
     async def async_evaluate(self, provider: str, generated_text: str, reference_text: str) -> Dict[str, Any]:
         prompt = self._build_prompt(generated_text, reference_text)
-        client = self._get_client(provider)
+        client = ClientRegistry.get(provider=provider)
 
         try:
             async for attempt in AsyncRetrying(
