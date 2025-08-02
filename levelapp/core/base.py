@@ -105,6 +105,33 @@ class BaseChatClient(ABC):
             raise
 
 
+class BaseMetric(ABC):
+    """Abstract base class for metrics collection."""
+    @abstractmethod
+    def compute(self, generated: str, reference: str) -> Dict[str, Any]:
+        """
+        Evaluate the generated text against the reference text.
+
+        Args:
+            generated (str): The generated text to evaluate.
+            reference (str): The reference text to compare against.
+
+        Returns:
+            Dict[str, Any]: Evaluation results including match level and justification.
+        """
+        raise NotImplementedError
+
+    @property
+    def name(self) -> str:
+        """
+        Get the name of the metric.
+
+        Returns:
+            str: Name of the metric.
+        """
+        return self.__class__.__name__.lower()
+
+
 class BaseDatastore(ABC):
     """Abstract base class for data stores."""
     @abstractmethod

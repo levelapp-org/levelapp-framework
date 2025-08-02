@@ -1,11 +1,12 @@
 """levelapp/utils.monitoring.py"""
 import logging
+import inspect
 import time
 
 from typing import Dict, Callable, Any, ParamSpec, TypeVar
 
 from threading import Lock
-from functools import lru_cache, wraps
+from functools import lru_cache, wraps, update_wrapper
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,10 +18,62 @@ T = TypeVar('T')
 class FunctionMonitor:
     """Thread-safe function monitoring and registry."""
     _monitored_functions: Dict[str, Callable[..., Any]] = {}
-    _Lock = Lock()
+    _lock = Lock()
 
     @classmethod
-    def register(
+    def _apply_caching(cls, func: Callable[P, T], maxsize: int | None) -> Callable[P, T]:
+        """
+        Apply LRU caching to a function and ensure cache methods are exposed.
+        """
+        cached_func = lru_cache(maxsize=maxsize)(func)
+
+        # Create wrapper that preserves cache methods
+        @wraps(func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            return cached_func(*args, **kwargs)
+
+        # Copy cache methods to wrapper
+        wrapper.cache_info = cached_func.cache_info
+        wrapper.cache_clear = cached_func.cache_clear
+
+        return wrapper
+
+    @classmethod
+    def _wrap_execution(
+            cls,
+            func: Callable[P, T],
+            name: str,
+            enable_timing: bool
+    ) -> Callable[P, T]:
+        """
+        Wrap function execution with timing and error handling.
+
+        Args:
+            func: Function to be wrapped
+            name: Unique identifier for the function
+            enable_timing: Enable execution time logging
+
+        Returns:
+            Wrapped function
+        """
+        @wraps(func)
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
+            start_time = time.perf_counter()
+            try:
+                result = func(*args, **kwargs)
+                if enable_timing:
+                    duration = time.perf_counter() - start_time
+                    logger.info(f"Executed '{name}' in {duration:.4f}s")
+                return result
+
+            except Exception as e:
+                logger.error(f"Error in '{name}': {str(e)}", exc_info=True)
+                raise
+
+        return wrapped
+
+    @classmethod
+    def monitor(
             cls,
             name: str,
             cached: bool = False,
@@ -37,40 +90,16 @@ class FunctionMonitor:
             enable_timing: Record execution time
         """
         def decorator(func: Callable[P, T]) -> Callable[P, T]:
-            if cached:
-                cached_func = lru_cache(maxsize=maxsize)(func)
-                wrapped_func = cached_func
-            else:
-                wrapped_func = func
+            wrapped_func = cls._apply_caching(func=func, maxsize=maxsize) if cached else func
+            monitored_func = cls._wrap_execution(func=wrapped_func, name=name, enable_timing=enable_timing)
 
-            @wraps(func)
-            def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
-                start_time = time.perf_counter()
-                try:
-                    result = wrapped_func(*args, **kwargs)
-                    if enable_timing:
-                        if enable_timing:
-                            duration = time.perf_counter() - start_time
-                            logger.info(f"Executed '{name}' in {duration:.4f}s")
-
-                    return result
-
-                except Exception as e:
-                    logger.error(f"Error in '{name}': {str(e)}", exc_info=True)
-                    raise
-
-            if cached:
-                wrapped.cache_clear = cached_func.cache_clear
-                wrapped.cache_info = cached_func.cache_info
-
-            with cls._Lock:
+            with cls._lock:
                 if name in cls._monitored_functions:
                     raise ValueError(f"Function '{name}' is already registered.")
 
-                cls._monitored_functions[name] = wrapped
-                logger.debug(f"Registered function '{name}'")
+                cls._monitored_functions[name] = monitored_func
 
-            return wrapped
+            return monitored_func
         return decorator
 
     @classmethod
@@ -82,15 +111,28 @@ class FunctionMonitor:
             name: Name of the registered function
 
         Returns:
-            Dict[str, Any]: Statistics including execution count and cache info
+            Dict[str, Any]: Statistics including:
+                - name: str
+                - cache_info: Optional[CacheInfo]
+                - is_cached: bool
         """
         if name not in cls._monitored_functions:
+            print(f"Function '{name}' is not registered.")
             return None
 
         func = cls._monitored_functions[name]
+
+        # Safely get the original function
+        original_func = inspect.unwrap(func)
+
         stats = {
             'name': name,
-            'execution_count': func.__wrapped__.__code__.co_argcount,
+            'is_cached': hasattr(func, 'cache_info'),
             'cache_info': func.cache_info() if hasattr(func, 'cache_info') else None
         }
+
+        # Only try to get arg count if we can safely access it
+        if hasattr(original_func, '__code__'):
+            stats['execution_count'] = original_func.__code__.co_argcount
+
         return stats
