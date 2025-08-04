@@ -21,6 +21,10 @@ class FunctionMonitor:
     _lock = Lock()
 
     @classmethod
+    def list_monitored_functions(cls) -> Dict[str, Callable[..., Any]]:
+        return cls._monitored_functions
+
+    @classmethod
     def _apply_caching(cls, func: Callable[P, T], maxsize: int | None) -> Callable[P, T]:
         """
         Apply LRU caching to a function and ensure cache methods are exposed.
