@@ -1,4 +1,5 @@
 """levelapp/core/base.py"""
+import datetime
 import json
 import httpx
 import requests
@@ -7,8 +8,7 @@ import logging
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
-from typing import Dict, Any
-
+from typing import Dict, Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,18 @@ class BaseChatClient(ABC):
 
 class BaseMetric(ABC):
     """Abstract base class for metrics collection."""
+
+    def __init__(self, processor: Callable | None = None, score_cutoff: float | None = None):
+        """
+        Initialize the metric.
+
+        Args:
+            processor (Optional[Callable]): Optional function to preprocess strings before comparison.
+            score_cutoff (Optional[float]): Minimum similarity score for an early match cutoff.
+        """
+        self.processor = processor
+        self.score_cutoff = score_cutoff
+
     @abstractmethod
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
@@ -130,6 +142,29 @@ class BaseMetric(ABC):
             str: Name of the metric.
         """
         return self.__class__.__name__.lower()
+
+    # TODO-0: You know what..We can remove this at some point.
+    @staticmethod
+    def _validate_inputs(generated: str, reference: str) -> None:
+        """Validate that both inputs are strings."""
+        if not (isinstance(generated, str) and isinstance(reference, str)):
+            raise TypeError("Both 'generated' and 'reference' must be strings.")
+
+    def _get_params(self) -> Dict[str, Any]:
+        """Return a serializable dictionary of metric parameters."""
+        return {
+            "processor": repr(self.processor) if self.processor else None,
+            "score_cutoff": self.score_cutoff
+        }
+
+    def _build_metadata(self, **extra_inputs) -> Dict[str, Any]:
+        """Construct a consistent metadata dictionary."""
+        return {
+            "type": self.__class__.__name__,
+            "params": self._get_params(),
+            "inputs": extra_inputs,
+            "timestamp": datetime.datetime.now()
+        }
 
 
 class BaseDatastore(ABC):

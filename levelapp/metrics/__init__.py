@@ -1,7 +1,7 @@
 """levelapp/metrics/__init__.py"""
 import logging
 
-from typing import List, Dict, Type
+from typing import List, Dict, Type, Any
 
 from levelapp.core.base import BaseMetric
 from levelapp.metrics.exact import EXACT_METRICS
@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class MetricRegistry:
+    """Registry for metric classes."""
     _metrics: Dict[str, Type[BaseMetric]] = {}
 
     @classmethod
@@ -22,9 +23,6 @@ class MetricRegistry:
             name (str): Unique identifier for the metric.
             metric_class (Type[BaseMetric]): The metric class to register.
         """
-        if not issubclass(metric_class, BaseMetric):
-            raise TypeError(f"Metric '{name}' must be a subclass of BaseMetric")
-
         if name in cls._metrics:
             raise KeyError(f"Metric '{name}' is already registered")
 
@@ -32,9 +30,9 @@ class MetricRegistry:
         logger.info(f"Metric '{name}' registered successfully.")
 
     @classmethod
-    def get(cls, name: str, **kwargs) -> Type[BaseMetric]:
+    def get(cls, name: str, **kwargs: Any) -> BaseMetric:
         """
-        Retrieve a registered metric class by its name.
+        Retrieve an instance of a registered metric by its name.
 
         Args:
             name (str): The name of the metric to retrieve.
@@ -61,9 +59,9 @@ class MetricRegistry:
 
 METRICS = FUZZY_METRICS | EXACT_METRICS
 
-for name, metric_class in METRICS.items():
+for name_, metric_class_ in METRICS.items():
     try:
-        MetricRegistry.register(name, metric_class)
+        MetricRegistry.register(name_, metric_class_)
 
     except Exception as e:
-        logger.info(f"Failed to register metric {name}: {e}")
+        logger.info(f"Failed to register metric {name_}: {e}")

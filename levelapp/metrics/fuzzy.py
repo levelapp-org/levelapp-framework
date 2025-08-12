@@ -1,28 +1,16 @@
 """levelapp/metrics/fuzzy.py"""
-import datetime
-
 from rapidfuzz import fuzz
 
-from typing import Dict, Any, Callable
+from typing import Dict, Any
 
 from levelapp.core.base import BaseMetric
-from levelapp.utils.monitoring import FunctionMonitor
+from levelapp.utils.monitoring import MonitoringAspect, MetricType
 
 
 class FuzzyRatio(BaseMetric):
     """A metric that computes the fuzzy ratio between two texts."""
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-    @FunctionMonitor.monitor(name="fuzzy_ratio", cached=True, enable_timing=True)
+    @MonitoringAspect.monitor(name="fuzzy_ratio", category=MetricType.API_CALL, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the fuzzy ratio between the generated text and the reference text.
@@ -34,9 +22,6 @@ class FuzzyRatio(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the fuzzy ratio score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
-
         score = fuzz.ratio(
             s1=generated,
             s2=reference,
@@ -47,15 +32,10 @@ class FuzzyRatio(BaseMetric):
         # TODO-0: Return results as Pydantic model.
         return {
             "score": score / 100,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
@@ -66,17 +46,7 @@ class PartialRatio(BaseMetric):
     allowing for partial matches.
     """
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-    @FunctionMonitor.monitor(name="partial_ratio", cached=True, enable_timing=True)
+    # @FunctionMonitor.monitor(name="partial_ratio", cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the partial fuzzy ratio between the generated text and the reference text.
@@ -88,26 +58,19 @@ class PartialRatio(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the partial fuzzy ratio.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
-
         score = fuzz.partial_ratio(
             s1=generated,
             s2=reference,
             processor=self.processor,
             score_cutoff=self.score_cutoff
         )
+
         return {
             "score": score / 100,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
