@@ -1,25 +1,13 @@
 """levelapp/metrics/token.py"""
-import datetime
-
 from rapidfuzz import fuzz
 
-from typing import Dict, Any, Callable
+from typing import Dict
 
 from levelapp.core.base import BaseMetric
 
 
 class WeightedRatio(BaseMetric):
     """A metric that calculates a weighted ratio based on the other ratio algorithms"""
-
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
 
     def compute(self, generated: str, reference: str):
         """
@@ -32,10 +20,7 @@ class WeightedRatio(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
-
-        score = fuzz.ratio(
+        score = fuzz.WRatio(
             s1=generated,
             s2=reference,
             processor=self.processor,
@@ -44,15 +29,10 @@ class WeightedRatio(BaseMetric):
 
         return {
             "score": score / 100,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
@@ -62,16 +42,6 @@ class TokenSetRatio(BaseMetric):
     on unique and common words between them using fuzz.ratio.
     """
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
     def compute(self, generated: str, reference: str):
         """
         Compute the token-based metric between the generated text and the reference text.
@@ -83,9 +53,6 @@ class TokenSetRatio(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
-
         score = fuzz.token_set_ratio(
             s1=generated,
             s2=reference,
@@ -95,30 +62,15 @@ class TokenSetRatio(BaseMetric):
 
         return {
             "score": score / 100,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
 class TokenSortRatio(BaseMetric):
     """A metric that sorts the words in the strings and calculates the fuzz.ratio between them."""
-
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
 
     def compute(self, generated: str, reference: str):
         """
@@ -131,9 +83,6 @@ class TokenSortRatio(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
-
         score = fuzz.token_sort_ratio(
             s1=generated,
             s2=reference,
@@ -143,13 +92,8 @@ class TokenSortRatio(BaseMetric):
 
         return {
             "score": score / 100,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }

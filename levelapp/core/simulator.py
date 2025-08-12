@@ -46,7 +46,7 @@ class ConversationSimulator:
         """
         self.evaluation_service = evaluation_service
         self.storage_service = storage_service
-        # TODO: Keep for now until we add a config method.
+        # TODO-0: Keep for now until we add a config method.
         self.api_configuration = endpoint_configuration
         self.logger = logging.getLogger("?")
 
@@ -106,7 +106,7 @@ class ConversationSimulator:
                 data=test_details.model_dump(by_alias=True),
             )
 
-        # TODO: Create custom exceptions for 'DataStore' implementations.
+        # TODO-1: Create custom exceptions for 'DataStore' implementations.
         except HTTPException as e:
             self.logger.error(f"[run_batch_test] Failed to save batch result: {e}")
 
@@ -175,7 +175,7 @@ class ConversationSimulator:
 
             collected_scores: Dict[str, List[Any]] = defaultdict(list)
             collected_verdicts: Dict[str, List[str]] = defaultdict(list)
-            # TODO: Remove the 'conversation_id' from 'simulate_interactions' signature.
+            # TODO-2: Remove the 'conversation_id' from 'simulate_interactions' signature.
             conversation_id = f"<CONV-ID:{str(uuid.uuid4())}>"
 
             initial_interaction_results = await self.simulate_interactions(
@@ -272,12 +272,12 @@ class ConversationSimulator:
             interaction.conversation_id = conversation_id
             user_message = interaction.user_message
 
-            # TODO: Add payload prep here.
+            # TODO-3: Add payload prep here.
 
             response = await async_vla_request(
                 url=self._endpoint,
                 headers=self._headers,
-                # TODO: Adjust the payload dump that needs to be passed for the request.
+                # TODO-4: Adjust the payload dump that needs to be passed for the request.
                 payload=interaction.model_dump(by_alias=True),
             )
 
@@ -299,8 +299,8 @@ class ConversationSimulator:
                 results.append(result)
                 continue
 
-            # TODO: Use the loader to build a pydantic model instance of the agent response.
-            # TODO: Extract directly the response text from the model.
+            # TODO-5: Use the loader to build a pydantic model instance of the agent response.
+            # TODO-6: Extract directly the response text from the model.
             interaction_details = extract_interaction_details(
                 response_text=response.text
             )

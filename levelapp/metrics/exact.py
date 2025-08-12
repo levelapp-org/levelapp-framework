@@ -1,28 +1,16 @@
 """levelapp/metrics/exact.py"""
-import datetime
-
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any
 
 from rapidfuzz import distance
 
 from levelapp.core.base import BaseMetric
-from levelapp.utils.monitoring import FunctionMonitor
+from levelapp.utils.monitoring import MonitoringAspect, MetricType
 
 
 class ExactMatch(BaseMetric):
     """Binary exact match comparison (1.0 for exact match, 0.0 otherwise)"""
 
-    def __init__(self, processor: Callable = None, score_cutoff: float = 1.0):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-    @FunctionMonitor.monitor(name="exact_match", cached=True, enable_timing=True)
+    @MonitoringAspect.monitor(name="exact_match", category=MetricType.SCORING, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """"
         Compute the exact match score between generated and reference strings.
@@ -34,44 +22,28 @@ class ExactMatch(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the exact match score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
+        self._validate_inputs(generated=generated, reference=reference)
 
         score = distance.Levenshtein.normalized_similarity(
             s1=generated,
             s2=reference,
             processor=self.processor,
-            score_cutoff=self.score_cutoff
+            score_cutoff=1.0
         )
 
         return {
             "score": score,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
 class Levenshtein(BaseMetric):
     """Levenshtein edit distance (number of insertions, deletions, substitutions)"""
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-    @FunctionMonitor.monitor(name="levenshtein", cached=True, enable_timing=True)
+    # @FunctionMonitor.monitor(name="levenshtein", cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Levenshtein distance score between generated and reference strings.
@@ -83,44 +55,28 @@ class Levenshtein(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the Levenshtein score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
+        self._validate_inputs(generated=generated, reference=reference)
 
         score = distance.Levenshtein.normalized_similarity(
             s1=generated,
             s2=reference,
             processor=self.processor,
-            score_cutoff=self.score_cutoff
+            score_cutoff=self.score_cutoff or 1.0
         )
 
         return {
             "score": score,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
 class JaroWinkler(BaseMetric):
     """Jaro-Winkler distance (similarity measure for strings)"""
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-    @FunctionMonitor.monitor(name="jaro_winkler", cached=True, enable_timing=True)
+    # @FunctionMonitor.monitor(name="jaro_winkler", cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Jaro-Winkler distance score between generated and reference strings.
@@ -132,8 +88,7 @@ class JaroWinkler(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the Jaro-Winkler score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
+        self._validate_inputs(generated=generated, reference=reference)
 
         score = distance.JaroWinkler.normalized_similarity(
             s1=generated,
@@ -144,32 +99,17 @@ class JaroWinkler(BaseMetric):
 
         return {
             "score": score,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
 class Hamming(BaseMetric):
     """Hamming distance (character substitutions only, for equal-length strings)"""
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-    @FunctionMonitor.monitor(name="hamming", cached=True)
+    # @FunctionMonitor.monitor(name="hamming", cached=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Hamming distance score between generated and reference strings.
@@ -181,8 +121,7 @@ class Hamming(BaseMetric):
         Returns:
             Dict[str, Any]: A dictionary containing the Hamming score and metadata.
         """
-        if not isinstance(generated, str) or not isinstance(reference, str):
-            raise TypeError("Inputs must be strings")
+        self._validate_inputs(generated=generated, reference=reference)
 
         score = distance.Hamming.normalized_similarity(
             s1=generated,
@@ -193,36 +132,29 @@ class Hamming(BaseMetric):
 
         return {
             "score": score,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "generated_length": len(generated),
-                    "reference_length": len(reference)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 
 class PrefixMatch(BaseMetric):
     """Prefix similarity (1.0 if generated starts with reference)"""
 
-    def __init__(self, processor: Callable = None, score_cutoff: float | None = None):
-        self.processor = processor
-        self.score_cutoff = score_cutoff
-
-    def _get_params(self) -> Dict[str, Any]:
-        return {
-            'processor': repr(self.processor) if self.processor else None,
-            'score_cutoff': self.score_cutoff
-        }
-
-
-    @FunctionMonitor.monitor(name="prefix_match", cached=True)
+    # @FunctionMonitor.monitor(name="prefix_match", cached=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
-        if not reference:  # Empty prefix matches everything
-            return {"score": 1.0, "metadata": {...}}
+        """
+        Compute the Prefix similarity score between generated and reference strings.
+
+        Args:
+            generated (str): The text generated by the agent.
+            reference (str): The expected reference text.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the Prefix similarity and metadata.
+        """
+        self._validate_inputs(generated=generated, reference=reference)
 
         score = distance.Prefix.normalized_similarity(
             s1=generated,
@@ -233,15 +165,10 @@ class PrefixMatch(BaseMetric):
 
         return {
             "score": score,
-            "metadata": {
-                "type": self.__class__.__name__,
-                "params": self._get_params(),
-                "inputs": {
-                    "prefix_length": len(reference),
-                    "generated_length": len(generated)
-                },
-                "timestamp": datetime.datetime.now()
-            }
+            "metadata": self._build_metadata(
+                generated_length=len(generated),
+                reference_length=len(reference)
+            )
         }
 
 

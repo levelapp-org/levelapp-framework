@@ -36,7 +36,7 @@ class ClientRegistry:
         if provider in cls._clients:
             raise KeyError(f"Client for provider '{provider}' is already registered")
 
-        cls._wrap_client_methods(client_class)
+        # cls._wrap_client_methods(client_class)
         cls._clients[provider] = client_class
         logger.info(f"Registered client for provider: {provider}")
 
@@ -52,13 +52,13 @@ class ClientRegistry:
             TypeError: If the methods are not callable.
         """
         client_class.call = FunctionMonitor.monitor(
-            f"{client_class.__name__}.call",
+            name=f"{client_class.__name__}.call",
             cached=False,
             enable_timing=True
         )(client_class.call)
 
         client_class.acall = FunctionMonitor.monitor(
-            f"{client_class.__name__}.acall",
+            name=f"{client_class.__name__}.acall",
             cached=False,
             enable_timing=True
         )(client_class.acall)
@@ -101,7 +101,7 @@ clients = {
 
 for provider, client_class in clients.items():
     try:
-        ClientRegistry.register(provider, client_class)
+        ClientRegistry.register(provider=provider, client_class=client_class)
 
     except (TypeError, KeyError) as e:
         logger.error(f"Failed to register client for {provider}: {e}")
