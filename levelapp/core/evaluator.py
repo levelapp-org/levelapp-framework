@@ -1,8 +1,11 @@
 """levelapp/core/evaluator.py"""
+import re
+import json
 import logging
 from functools import lru_cache
 
 from typing import Dict, Any
+from pydantic import BaseModel, Field, field_validator
 
 from tenacity import (
     retry,
@@ -13,11 +16,75 @@ from tenacity import (
     RetryError,
 )
 
-from levelapp.clients.registry import ClientRegistry
+from levelapp.clients import ClientRegistry
 from levelapp.core.base import BaseEvaluator, BaseChatClient
 
 
 logger = logging.getLogger(__name__)
+
+
+class JudgeEvaluationResults(BaseModel):
+    """Structured result of an interaction evaluation."""
+    provider: str = Field(..., description="The provider name, e.g., 'openai', 'ionos'")
+    match_level: int = Field(..., ge=-1, le=5, description="Evaluation score between -1 and 5")
+    justification: str = Field(..., description="Short explanation of the evaluation result")
+    raw_response: Dict[str, Any] = Field(..., description="Full unprocessed API response")
+
+    @classmethod
+    @field_validator("match_level", mode='before')
+    def validate_match_level(cls, v):
+        if isinstance(v, str) and v.isdigit():
+            return int(v)
+        return v
+
+    @classmethod
+    def from_raw(cls, provider: str, raw: Dict[str, Any]) -> "JudgeEvaluationResults":
+        """
+        Factory method to extract match_level and justification
+        from raw responses for known providers.
+        """
+        match_level = -1
+        justification = "Unable to parse response."
+
+        try:
+            if provider.lower() == "openai":
+                # OpenAI content is in choices[0].message.content as JSON string
+                content = raw["choices"][0]["message"]["content"]
+                parsed = cls._safe_json_parse(content)
+                match_level = parsed.get("match_level", match_level)
+                justification = parsed.get("justification", justification)
+
+            elif provider.lower() == "ionos":
+                # IONOS puts it in properties.output (sometimes wrapped in ``` or extra text)
+                output = raw["properties"]["output"]
+                cleaned = cls._strip_code_fences(output)
+                parsed = cls._safe_json_parse(cleaned)
+                match_level = parsed.get("match_level", match_level)
+                justification = parsed.get("justification", justification)
+
+        except Exception as e:
+            justification = f"Parsing error: {str(e)}"
+
+        return cls(
+            provider=provider,
+            match_level=match_level,
+            justification=justification,
+            raw_response=raw
+        )
+
+    @staticmethod
+    def _safe_json_parse(text: str) -> Dict[str, Any]:
+        """Parse JSON safely, even if surrounded by extra spaces/newlines."""
+        try:
+            return json.loads(text.strip())
+        except json.JSONDecodeError:
+            return {}
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """Remove triple backticks and language hints from code blocks."""
+        return re.sub(r"^(```[a-zA-Z]*\n?)$", "", text.strip(), flags=re.MULTILINE)
+
 
 # TODO-0: Move this to a separate file.
 EVAL_PROMPT_TEMPLATE = """
@@ -45,6 +112,7 @@ Return your evaluation as a valid JSON object with exactly these keys:
 Output only the JSON object and nothing else.
 """
 
+
 class InteractionEvaluator(BaseEvaluator):
     def __init__(self):
         self.prompt_template = EVAL_PROMPT_TEMPLATE
@@ -71,7 +139,7 @@ class InteractionEvaluator(BaseEvaluator):
 
         try:
             response = client.call(message=prompt)
-            logger.info(f"[{provider}] Evaluation: {response}")
+            logger.info(f"[{provider}] Evaluation: {response}\n{'---' * 10}")
             # TODO-2: Validate response structure using Pydantic or similar.
             return response
 
@@ -79,8 +147,13 @@ class InteractionEvaluator(BaseEvaluator):
             logger.error(f"[{provider}] Evaluation failed: {e}", exc_info=True)
             return {"match_level": -1, "justification": f"Exception during evaluation: {str(e)}"}
 
-    async def async_evaluate(self, provider: str, generated_text: str, reference_text: str) -> Dict[str, Any]:
-        prompt = self._build_prompt(generated_text, reference_text)
+    async def async_evaluate(
+            self,
+            provider: str,
+            generated_text: str,
+            reference_text: str
+    ) -> JudgeEvaluationResults | None:
+        prompt = self._build_prompt(generated_text=generated_text, reference_text=reference_text)
         client = ClientRegistry.get(provider=provider)
 
         try:
@@ -92,12 +165,14 @@ class InteractionEvaluator(BaseEvaluator):
             ):
                 with attempt:
                     response = await client.acall(message=prompt)
-                    logger.info(f"[{provider}] Async evaluation: {response}")
-                    return response
+                    logger.info(f"[{provider}] Async evaluation: (response type:{type(response)})\n{response}\n{'---' * 10}")
+                    return JudgeEvaluationResults.from_raw(provider=provider, raw=response)
 
         except RetryError as e:
             logger.error(f"[{provider}] Async evaluation failed after retries: {e}", exc_info=True)
-            return {
-                "match_level": -1,
-                "justification": f"Async evaluation failed after retries: {str(e)}"
-            }
+            return JudgeEvaluationResults(
+                provider=provider,
+                match_level=-1,
+                justification="Unable to parse response.",
+                raw_response=response,
+            )

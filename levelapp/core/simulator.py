@@ -3,25 +3,24 @@
 """
 
 import asyncio
+import json
 import logging
 import time
-import uuid
+
+from uuid import UUID
 from collections import defaultdict
 from datetime import datetime
-from http.client import HTTPException
 from typing import Dict, Any, List
 
-from .base import BaseDatastore, BaseEvaluator
+from .base import BaseDatastore
+from .evaluator import InteractionEvaluator
 from ..simulator.schemas import (
-    InteractionEvaluationResult,
-    BatchDetails,
-    TestResults,
-    EndpointConfig, ScriptsBatch, ConversationScript,
+    InteractionEvaluationResults,
+    EndpointConfig, ScriptsBatch, ConversationScript, SimulationResults
 )
 from ..simulator.utils import (
     extract_interaction_details,
-    async_vla_request,
-    date_value_setter,
+    async_interaction_request,
     calculate_average_scores,
     summarize_verdicts,
 )
@@ -33,7 +32,7 @@ class ConversationSimulator:
     def __init__(
         self,
         storage_service: BaseDatastore,
-        evaluation_service: BaseEvaluator,
+        evaluation_service: InteractionEvaluator,
         endpoint_configuration: EndpointConfig,
     ):
         """
@@ -61,8 +60,6 @@ class ConversationSimulator:
     async def run_batch_test(
         self,
         test_batch: ScriptsBatch,
-        batch_details: BatchDetails,
-        test_details: TestResults,
         attempts: int = 1,
     ) -> Dict[str, Any]:
         """
@@ -70,47 +67,48 @@ class ConversationSimulator:
 
         Args:
             test_batch (ScriptsBatch): Scenario batch object.
-            batch_details (Dict[str, Any]): Test batch test details.
-            test_details (Dict[str, Any]): Test details dictionary.
             attempts (int): Number of attempts to run the simulation.
 
         Returns:
             Dict[str, Any]: The results of the batch test.
         """
-        self.logger.info(
-            f"[run_batch_test] Starting batch test for batch: {test_details.test_name}"
-        )
-        started_at = datetime.now().isoformat()
-        start_time = time.time()
+        self.logger.info("[run_batch_test] Starting batch test for batch.")
+        started_at = datetime.now()
 
         self.test_batch = test_batch
         results = await self.simulate_conversation(attempts=attempts)
 
-        finished_at = datetime.now().isoformat()
-        elapsed_time = time.time() - start_time
+        finished_at = datetime.now()
 
-        batch_details.started_at = started_at
-        batch_details.finished_at = finished_at
-        batch_details.elapsed_time = elapsed_time
-        batch_details.evaluation_summary = self.verdict_summaries
-        batch_details.average_scores = results["averageScores"]
-        batch_details.simulation_results = results["scenarios"]
+        results = SimulationResults(
+            started_at=started_at,
+            finished_at=finished_at,
+            evaluation_summary=self.verdict_summaries,
+            average_scores=results.get("average_scores", {}),
+        )
 
-        test_details.batch_details = batch_details
 
-        try:
-            self.storage_service.save_batch_test_results(
-                user_id=batch_details.user_id,
-                project_id=batch_details.project_id,
-                batch_id=batch_details.batch_id,
-                data=test_details.model_dump(by_alias=True),
-            )
+        # batch_details.started_at = started_at
+        # batch_details.finished_at = finished_at
+        # batch_details.evaluation_summary = self.verdict_summaries
+        # batch_details.average_scores = results["averageScores"]
+        # batch_details.simulation_results = results["scenarios"]
+        #
+        # test_details.batch_details = batch_details
+        #
+        # try:
+        #     self.storage_service.save_batch_test_results(
+        #         user_id=results.user_id,
+        #         project_id=results.project_id,
+        #         batch_id=results.batch_id,
+        #         data=test_details.model_dump(by_alias=True),
+        #     )
+        #
+        # # TODO-1: Create custom exceptions for 'DataStore' implementations.
+        # except HTTPException as e:
+        #     self.logger.error(f"[run_batch_test] Failed to save batch result: {e}")
 
-        # TODO-1: Create custom exceptions for 'DataStore' implementations.
-        except HTTPException as e:
-            self.logger.error(f"[run_batch_test] Failed to save batch result: {e}")
-
-        return {"batchId": batch_details.batch_id, "status": "COMPLETE"}
+        return {"results": results, "status": "COMPLETE"}
 
     async def simulate_conversation(self, attempts: int = 1) -> Dict[str, Any]:
         """
@@ -122,7 +120,9 @@ class ConversationSimulator:
         Returns:
             Dict[str, Any]: The results of the conversation simulation.
         """
-        self.logger.info("[simulate_conversation] starting conversation simulation..")
+        _FUNC_NAME: str = self.simulate_single_scenario.__name__
+
+        self.logger.info(f"[{_FUNC_NAME}] starting conversation simulation..")
         semaphore = asyncio.Semaphore(value=len(self.test_batch.scripts))
 
         async def run_with_semaphore(script: ConversationScript) -> Dict[str, Any]:
@@ -137,7 +137,7 @@ class ConversationSimulator:
 
         aggregate_scores: Dict[str, List[float]] = defaultdict(list)
         for result in results:
-            for key, value in result.get("averageScores", {}).items():
+            for key, value in result.get("average_scores", {}).items():
                 if isinstance(value, (int, float)):
                     aggregate_scores[key].append(value)
 
@@ -148,7 +148,7 @@ class ConversationSimulator:
                 verdicts=verdicts, judge=judge
             )
 
-        return {"scenarios": results, "averageScores": overall_average_scores}
+        return {"scripts": results, "average_scores": overall_average_scores}
 
     async def simulate_single_scenario(
         self, script: ConversationScript, attempts: int = 1
@@ -176,27 +176,12 @@ class ConversationSimulator:
             collected_scores: Dict[str, List[Any]] = defaultdict(list)
             collected_verdicts: Dict[str, List[str]] = defaultdict(list)
             # TODO-2: Remove the 'conversation_id' from 'simulate_interactions' signature.
-            conversation_id = f"<CONV-ID:{str(uuid.uuid4())}>"
-
+            
             initial_interaction_results = await self.simulate_interactions(
                 script=script,
-                conversation_id=conversation_id,
                 evaluation_verdicts=collected_verdicts,
                 collected_scores=collected_scores,
             )
-
-            if initial_interaction_results["interactionType"] in (
-                "handoff",
-                "newBooking",
-            ):
-                inbound_interactions_results = None
-            else:
-                inbound_interactions_results = await self.simulate_interactions(
-                    script=script,
-                    conversation_id=conversation_id,
-                    evaluation_verdicts=collected_verdicts,
-                    collected_scores=collected_scores,
-                )
 
             single_attempt_scores = calculate_average_scores(collected_scores)
 
@@ -207,44 +192,42 @@ class ConversationSimulator:
                 all_attempts_verdicts[judge].extend(verdicts)
 
             elapsed_time = time.time() - start_time
-            all_attempts_scores["processingTime"].append(elapsed_time)
+            all_attempts_scores["processing_time"].append(elapsed_time)
 
             self.logger.info(
                 f"[simulate_single_scenario] Attempt {attempt_number + 1} completed in {elapsed_time:.2f}s\n---"
             )
 
             return {
-                "attemptId": attempt_number + 1,
-                "conversationId": conversation_id,
-                "totalDurationSeconds": elapsed_time,
-                "initialInteraction": initial_interaction_results,
-                "inboundInteractions": inbound_interactions_results,
-                "globalJustification": collected_verdicts,
-                "averageScores": single_attempt_scores,
+                "attempt": attempt_number + 1,
+                "script_id": script.id,
+                "total_duration": elapsed_time,
+                "interaction_results": initial_interaction_results,
+                "evaluation_verdicts": collected_verdicts,
+                "average_scores": single_attempt_scores,
             }
 
         attempt_tasks = [simulate_attempt(i) for i in range(attempts)]
         attempt_results = await asyncio.gather(*attempt_tasks, return_exceptions=False)
 
         average_scores = calculate_average_scores(all_attempts_scores)
+
         for judge_, verdicts_ in all_attempts_verdicts.items():
             self.evaluation_verdicts[judge_].extend(verdicts_)
 
         self.logger.info(
-            f"[simulate_single_conversation] average scores:\n{average_scores}\n---"
+            f"[{_FUNC_NAME}] average scores:\n{average_scores}\n---"
         )
 
         return {
-            "scenarioId": script.scenario_title.replace(" ", "-"),
-            "scenarioName": script.scenario_title,
+            "script_id": script.id,
             "attempts": attempt_results,
-            "averageScores": average_scores,
+            "average_scores": average_scores,
         }
 
     async def simulate_interactions(
         self,
         script: ConversationScript,
-        conversation_id: str,
         evaluation_verdicts: Dict[str, List[str]],
         collected_scores: Dict[str, List[Any]],
     ) -> List[Dict[str, Any]]:
@@ -253,7 +236,6 @@ class ConversationSimulator:
 
         Args:
             script (ConversationScript): The script to simulate.
-            conversation_id (str): The conversation ID.
             evaluation_verdicts(Dict[str, List[str]]): evaluation verdict for each evaluator.
             collected_scores(Dict[str, List[Any]]): collected scores for each target.
 
@@ -269,16 +251,19 @@ class ConversationSimulator:
         interactions = script.interactions
 
         for interaction in interactions:
-            interaction.conversation_id = conversation_id
             user_message = interaction.user_message
 
             # TODO-3: Add payload prep here.
 
-            response = await async_vla_request(
+            self.api_configuration.payload_template['prompt'] = user_message
+            payload = self.api_configuration.payload_template
+
+
+            response = await async_interaction_request(
                 url=self._endpoint,
                 headers=self._headers,
                 # TODO-4: Adjust the payload dump that needs to be passed for the request.
-                payload=interaction.model_dump(by_alias=True),
+                payload=payload,
             )
 
             reference_reply = interaction.reference_reply
@@ -353,7 +338,7 @@ class ConversationSimulator:
         reference_metadata: Dict[str, Any],
         generated_guardrail: bool,
         reference_guardrail: bool,
-    ) -> InteractionEvaluationResult:
+    ) -> InteractionEvaluationResults:
         """
         Evaluate an interaction using OpenAI and Ionos evaluation services.
 
@@ -366,41 +351,44 @@ class ConversationSimulator:
             reference_guardrail (bool): reference handoff/guardrail flag.
 
         Returns:
-            InteractionEvaluationResult: The evaluation results.
+            InteractionEvaluationResults: The evaluation results.
         """
-        openai_eval_task = self.evaluation_service.evaluate_response(
+        openai_eval_task = self.evaluation_service.async_evaluate(
             provider="openai",
-            output_text=generated_reply,
+            generated_text=generated_reply,
             reference_text=reference_reply,
         )
 
-        ionos_eval_task = self.evaluation_service.evaluate_response(
+        ionos_eval_task = self.evaluation_service.async_evaluate(
             provider="ionos",
-            output_text=generated_reply,
+            generated_text=generated_reply,
             reference_text=reference_reply,
         )
 
-        openai_reply_evaluation, ionos_reply_evaluation = await asyncio.gather(
+        openai_judge_evaluation, ionos_judge_evaluation = await asyncio.gather(
             openai_eval_task, ionos_eval_task
         )
 
-        extracted_metadata_evaluation = evaluate_metadata(
-            expected=reference_metadata,
-            actual=generated_metadata,
-        )
+        # extracted_metadata_evaluation = evaluate_metadata(
+        #     expected=reference_metadata,
+        #     actual=generated_metadata,
+        # )
+
+        extracted_metadata_evaluation = 0.0
 
         guardrail_flag = 1 if generated_guardrail == reference_guardrail else 0
 
-        return InteractionEvaluationResult(
-            openaiReplyEvaluation=openai_reply_evaluation,
-            ionosReplyEvaluation=ionos_reply_evaluation,
-            extractedMetadataEvaluation=extracted_metadata_evaluation,
-            guardrailFlag=guardrail_flag,
+        return InteractionEvaluationResults(
+            evaluations={
+                openai_judge_evaluation.provider: openai_judge_evaluation,
+                ionos_judge_evaluation.provider: ionos_judge_evaluation
+            },
+            extracted_metadata_evaluation=extracted_metadata_evaluation,
         )
 
     @staticmethod
     def store_evaluation_results(
-        results: InteractionEvaluationResult,
+        results: InteractionEvaluationResults,
         evaluation_verdicts: Dict[str, List[str]],
         collected_scores: Dict[str, List[Any]],
     ) -> None:
@@ -408,18 +396,19 @@ class ConversationSimulator:
         Store the evaluation results in the evaluation summary.
 
         Args:
-            results (InteractionEvaluationResult): The evaluation results to store.
+            results (InteractionEvaluationResults): The evaluation results to store.
             evaluation_verdicts (Dict[str, List[str]]): The evaluation summary.
             collected_scores (Dict[str, List[Any]]): The collected scores.
         """
+        # TODO-7: I don't like this. Figure out a proper way to access the verdicts.
         evaluation_verdicts["openaiJustificationSummary"].append(
-            results.openaiReplyEvaluation.justification
+            results.evaluations.get("openai", "").justification
         )
         evaluation_verdicts["ionosJustificationSummary"].append(
-            results.ionosReplyEvaluation.justification
+            results.evaluations.get("ionos", "").justification
         )
 
-        collected_scores["openai"].append(results.openaiReplyEvaluation.match_level)
-        collected_scores["ionos"].append(results.ionosReplyEvaluation.match_level)
-        collected_scores["metadata"].append(results.extractedMetadataEvaluation)
-        collected_scores["guardrail"].append(results.guardrailFlag)
+        collected_scores["openai"].append(results.evaluations.get("openai", "").match_level)
+        collected_scores["ionos"].append(results.evaluations.get("ionos", "").match_level)
+        collected_scores["metadata"].append(0)
+        collected_scores["guardrail"].append(0)

@@ -9,7 +9,8 @@ from ..core.base import BaseChatClient
 class IonosClient(BaseChatClient):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.base_url = kwargs.get('base_url')
+        # TODO-0: Figure out how to pass the IONOS endpoint URL properly.
+        self.base_url = kwargs.get('base_url') or os.getenv("IONOS_BASE_URL") + "/0b6c4a15-bb8d-4092-82b0-f357b77c59fd"
         self.api_key = kwargs.get('api_key') or os.environ.get("IONOS_API_KEY")
         if not self.api_key:
             raise ValueError("IONOS API key not set.")

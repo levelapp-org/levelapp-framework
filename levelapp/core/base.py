@@ -81,7 +81,7 @@ class BaseChatClient(ABC):
             raise
 
     async def acall(self, message: str) -> Dict[str, Any]:
-        url = self._build_url("/predictions")
+        url = self._build_url(self._endpoint())
         headers = self._build_headers()
         payload = self._build_payload(message)
 
