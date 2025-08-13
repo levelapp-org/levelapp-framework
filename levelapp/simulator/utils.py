@@ -7,16 +7,23 @@ import logging
 import httpx
 import arrow
 
+from uuid import UUID
 from typing import Dict, Any, Optional, List
 
 from openai import OpenAI
 from pydantic import ValidationError
 
-from firestore.schemas import ScenarioBatch
-from schemas import InteractionResults
+from levelapp.simulator.schemas import InteractionResults
 
 
 logger = logging.getLogger("batch-test-cloud-function")
+
+
+class UUIDEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, UUID):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
 
 
 def extract_interaction_details(
@@ -32,36 +39,40 @@ def extract_interaction_details(
         InteractionResults: The extracted interaction details.
     """
     try:
-        data = json.loads(response_text)
-        payload = data.get("payload", {})
+        payload = {
+            "generated_reply": response_text,
+            "generated_metadata": {},
+            "guardrail_details": {},
+            "interaction_type": ""
+        }
 
         return InteractionResults(
-            vla_reply=payload.get("message", "No response"),
-            extracted_metadata=payload.get("metadata", {}),
-            handoff_details=payload.get("handoffMetadata", {}),
-            event_type=payload.get("eventType", ""),
+            generated_reply=payload.get("generated_reply", ""),
+            generated_metadata=payload.get("generated_metadata", {}),
+            guardrail_details=payload.get("guardrail_details", {}),
+            interaction_type=payload.get("interaction_type", ""),
         )
 
     except json.JSONDecodeError as err:
         logger.error(f"[extract_interaction_details] JSON decoding error: {err}")
         return InteractionResults(
-            vla_reply="VLA request failed.",
-            extracted_metadata={},
-            handoff_details={},
-            event_type="",
+            generated_reply="VLA request failed.",
+            generated_metadata={},
+            guardrail_details={},
+            interaction_type="",
         )
 
     except ValidationError as err:
         logger.error(f"[extract_interaction_details] Pydantic validation error: {err}")
         return InteractionResults(
-            vla_reply="VLA request failed.",
-            extracted_metadata={},
-            handoff_details={},
-            event_type="",
+            generated_reply="VLA request failed.",
+            generated_metadata={},
+            guardrail_details={},
+            interaction_type="",
         )
 
 
-async def async_vla_request(
+async def async_interaction_request(
         url: str,
         headers: Dict[str, str],
         payload: Dict[str, Any],
@@ -129,27 +140,6 @@ def parse_date_value(raw_date_value: Optional[str], default_date_value: Optional
     except Exception as e:
         logger.error(f"[parse_date_value] Unexpected error.\nException: {str(e)}", exc_info=True)
         return default_date_value
-
-
-def date_value_setter(batch: ScenarioBatch) -> ScenarioBatch:
-    """
-    Helper function that dynamically sets the 'move-in date' value in a ScenarioBatch.
-
-    Args:
-        batch (ScenarioBatch): The batch of scenarios to update.
-
-    Returns:
-        ScenarioBatch: The updated batch of scenarios with parsed 'move-in date' values.
-    """
-    for scenario in batch.scenarios:
-        raw_value = scenario.expected_metadata.desired_move_in_date
-        scenario.expected_metadata.desired_move_in_date = parse_date_value(raw_date_value=raw_value)
-
-        for interaction in scenario.inbound_interactions:
-            raw_value = interaction.expected_metadata.desired_move_in_date
-            interaction.expected_metadata.desired_move_in_date = parse_date_value(raw_date_value=raw_value)
-
-    return batch
 
 
 def calculate_average_scores(scores: Dict[str, List[float]]) -> Dict[str, float]:
