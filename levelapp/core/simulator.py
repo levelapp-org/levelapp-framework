@@ -14,9 +14,12 @@ from typing import Dict, Any, List
 
 from .base import BaseDatastore
 from .evaluator import InteractionEvaluator
+from ..config.interaction_request import EndpointConfig
 from ..simulator.schemas import (
     InteractionEvaluationResults,
-    EndpointConfig, ScriptsBatch, ConversationScript, SimulationResults
+    ScriptsBatch,
+    ConversationScript,
+    SimulationResults
 )
 from ..simulator.utils import (
     extract_interaction_details,
@@ -45,12 +48,11 @@ class ConversationSimulator:
         """
         self.evaluation_service = evaluation_service
         self.storage_service = storage_service
-        # TODO-0: Keep for now until we add a config method.
-        self.api_configuration = endpoint_configuration
-        self.logger = logging.getLogger("?")
+        self.endpoint_configuration = endpoint_configuration
+        self.logger = logging.getLogger(__name__)
 
-        self._endpoint = endpoint_configuration.full_url
-        self._credentials = endpoint_configuration.api_key
+        self._url = endpoint_configuration.full_url
+        self._credentials = endpoint_configuration.api_key.get_secret_value()
         self._headers = endpoint_configuration.headers
 
         self.test_batch: ScriptsBatch | None = None
@@ -175,14 +177,14 @@ class ConversationSimulator:
 
             collected_scores: Dict[str, List[Any]] = defaultdict(list)
             collected_verdicts: Dict[str, List[str]] = defaultdict(list)
-            # TODO-2: Remove the 'conversation_id' from 'simulate_interactions' signature.
-            
+
             initial_interaction_results = await self.simulate_interactions(
                 script=script,
                 evaluation_verdicts=collected_verdicts,
                 collected_scores=collected_scores,
             )
 
+            self.logger.info(f"[simulate_attempt] collected_scores: {collected_scores}\n---")
             single_attempt_scores = calculate_average_scores(collected_scores)
 
             for target, scores in single_attempt_scores.items():
@@ -252,29 +254,22 @@ class ConversationSimulator:
 
         for interaction in interactions:
             user_message = interaction.user_message
-
-            # TODO-3: Add payload prep here.
-
-            self.api_configuration.payload_template['prompt'] = user_message
-            payload = self.api_configuration.payload_template
-
-
+            self.endpoint_configuration.variables = {"user_message": user_message}
+            payload = self.endpoint_configuration.payload
             response = await async_interaction_request(
-                url=self._endpoint,
-                headers=self._headers,
-                # TODO-4: Adjust the payload dump that needs to be passed for the request.
+                url=self.endpoint_configuration.full_url,
+                headers=self.endpoint_configuration.headers,
                 payload=payload,
             )
-
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata
             reference_guardrail_flag: bool = interaction.guardrail_flag
 
             if not response or response.status_code != 200:
-                self.logger.error("[simulate_inbound_interaction] VLA request failed.")
+                self.logger.error(f"[{_FUNC_NAME}] Interaction request failed.")
                 result = {
                     "user_message": user_message,
-                    "generated_reply": "VLA Request failed",
+                    "generated_reply": "Interaction Request failed",
                     "reference_reply": reference_reply,
                     "generated_metadata": {},
                     "reference_metadata": reference_metadata,
@@ -287,7 +282,7 @@ class ConversationSimulator:
             # TODO-5: Use the loader to build a pydantic model instance of the agent response.
             # TODO-6: Extract directly the response text from the model.
             interaction_details = extract_interaction_details(
-                response_text=response.text
+                response=response.text
             )
 
             generated_reply = interaction_details.generated_reply
@@ -313,7 +308,7 @@ class ConversationSimulator:
 
             elapsed_time = time.time() - start_time
             self.logger.info(
-                f"[simulate_initial_interaction] Simulation complete in {elapsed_time:.2f} seconds.\n---"
+                f"[{_FUNC_NAME}] Interaction simulation complete in {elapsed_time:.2f} seconds.\n---"
             )
 
             result = {

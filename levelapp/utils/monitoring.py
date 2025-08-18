@@ -6,7 +6,7 @@ import tracemalloc
 from collections import defaultdict
 
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import List, Dict, Callable, Any, Union, ParamSpec, TypeVar, runtime_checkable, Protocol, Type
 
 from datetime import datetime
@@ -48,6 +48,20 @@ class ExecutionMetrics:
 
     def update_duration(self, value: float) -> None:
         self.duration = value
+
+    def to_dict(self) -> dict:
+        """Returns the content of the ExecutionMetrics as a structured dictionary."""
+        metrics_dict = {}
+        for field in fields(self):
+            value = getattr(self, field.name)
+
+            # Special handling for enum types to convert them to their value
+            if isinstance(value, Enum):
+                metrics_dict[field.name] = value.name
+            else:
+                metrics_dict[field.name] = value
+
+        return metrics_dict
 
 
 @dataclass
@@ -218,7 +232,7 @@ class FunctionMonitor:
             try:
                 metrics.update(collector.collect_before(metadata=metadata))
             except Exception as e:
-                logger.warning(f"Metrics collector failed: {e}")
+                logger.warning(f"[FunctionMonitor] Metrics collector failed: {e}")
 
         return metrics
 
@@ -231,35 +245,40 @@ class FunctionMonitor:
             try:
                 metrics.update(collector.collect_after(metadata=metadata))
             except Exception as e:
-                logger.warning(f"Metrics collector failed: {e}")
+                logger.warning(f"[FunctionMonitor] Metrics collector failed: {e}")
 
         return metrics
 
     @staticmethod
     def _apply_caching(func: Callable[P, T], maxsize: int | None) -> Callable[P, T]:
-        """Apply LRU caching with cache hit tracking."""
         if maxsize is None:
             return func
 
-        cached_func = lru_cache(maxsize=maxsize)(func)
+        def make_args_hashable(args, kwargs):
+            hashable_args = tuple(_make_hashable(a) for a in args)
+            hashable_kwargs = tuple(sorted((k, _make_hashable(v)) for k, v in kwargs.items()))
+            return hashable_args, hashable_kwargs
 
-        @wraps(cached_func)
+        @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            cache_info_before = cached_func.cache_info()
-            result = cached_func(*args, **kwargs)
-            cache_info_after = cached_func.cache_info()
+            # Build a hashable cache key without altering the original args
+            cache_key = make_args_hashable(args, kwargs)
 
-            if not hasattr(wrapper, '_cache_hit_info'):
-                wrapper.cache_hit_info = threading.local()
+            if not hasattr(wrapper, "_cache"):
+                wrapper._cache = {}
+                wrapper._cache_info = {"hits": 0, "misses": 0}
 
-            wrapper.cache_hit_info.is_hit = cache_info_after.hits > cache_info_before.hits
+            if cache_key in wrapper._cache:
+                wrapper._cache_info["hits"] += 1
+                return wrapper._cache[cache_key]
 
+            wrapper._cache_info["misses"] += 1
+            result = func(*args, **kwargs)  # pass ORIGINAL args
+            wrapper._cache[cache_key] = result
             return result
 
-        # Copy cache methods to wrapper
-        wrapper.cache_info = cached_func.cache_info
-        wrapper.cache_clear = cached_func.cache_clear
-
+        wrapper.cache_info = wrapper._cache_info
+        wrapper.cache_clear = wrapper._cache.clear()
         return wrapper
 
     def _wrap_execution(
@@ -333,7 +352,7 @@ class FunctionMonitor:
                     self._aggregated_stats[name].update(metrics)
 
                 if enable_timing and metrics.duration:
-                    log_message = f"Executed '{name}' in {metrics.duration:.4f}s"
+                    log_message = f"[FunctionMonitor] Executed '{name}' in {metrics.duration:.4f}s"
                     if metrics.cache_hit:
                         log_message += " (cache hit)"
                     if metrics.memory_peak:
@@ -610,3 +629,17 @@ def monitor_api_calls(name: str, **kwargs) -> Callable[[Callable[P, T]], Callabl
         Callable[[Callable[P, T]], Callable[P, T]]: Decorator function with API call tracking.
     """
     return monitor(name, track_memory=True, enable_timing=True, **kwargs)
+
+
+def _make_hashable(obj):
+    """Convert potentially unhashable objects to a hashable representation."""
+    if isinstance(obj, defaultdict):
+        return 'defaultdict', _make_hashable(dict(obj))
+
+    elif isinstance(obj, dict):
+        return tuple(sorted((k, _make_hashable(v)) for k, v in obj.items()))
+
+    elif isinstance(obj, (list, set, tuple)):
+        return tuple(_make_hashable(v) for v in obj)
+
+    return obj

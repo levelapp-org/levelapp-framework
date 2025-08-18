@@ -29,14 +29,16 @@ class EndpointConfig(BaseModel):
     variables: Dict[str, Any] = Field(default_factory=dict)
 
     @computed_field()
+    @property
     def full_url(self) -> str:
         return str(self.base_url)
 
     @computed_field()
+    @property
     def headers(self) -> Dict[str, Any]:
         headers: Dict[str, Any] = {"Content-Type": "application/json"}
         if self.model_id:
-            headers["x-api-key"] = self.model_id
+            headers["x-model-id"] = self.model_id
         if self.bearer_token:
             headers["Authorization"] = f"Bearer {self.bearer_token.get_secret_value()}"
         if self.api_key:
@@ -44,11 +46,13 @@ class EndpointConfig(BaseModel):
         return headers
 
     @computed_field
+    @property
     def payload(self) -> Dict[str, Any]:
         """Return fully prepared payload depending on template or full payload."""
+        self.load_template()
         if not self.variables:
             # Case 1: Already complete payload
-            return self.payload_template
+            raise ValueError("[EndpointConfig] No variables defined to populate the payload template")
         # Case 2: Template substitution
         return self._replace_placeholders(self.payload_template, self.variables)
 
@@ -72,7 +76,7 @@ class EndpointConfig(BaseModel):
 
         return _replace(obj)
 
-    def load_template(self, path: str | None) -> Dict[str, Any]:
+    def load_template(self, path: str | None = None) -> Dict[str, Any]:
         try:
             if not path:
                 path = os.getenv('PAYLOAD_PATH', '')
@@ -114,11 +118,9 @@ if __name__ == '__main__':
 
     cfg = EndpointConfig()
     template_ = cfg.load_template(path="../../src/data/payload_example_1.yaml")
-    print(f"payload without variables:\n{template_}")
 
     cfg.variables = {"user_message": "Hello, world!"}
     payload = cfg.payload
-    print(f"payload with variables:\n{payload}")
+    print(f"payload with variables:\n{payload}\n\n")
 
     print(f"Configuration dump:\n{cfg.model_dump()}")
-

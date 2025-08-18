@@ -14,6 +14,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from levelapp.simulator.schemas import InteractionResults
+from levelapp.utils.monitoring import MonitoringAspect, MetricType
 
 
 logger = logging.getLogger("batch-test-cloud-function")
@@ -27,25 +28,24 @@ class UUIDEncoder(json.JSONEncoder):
 
 
 def extract_interaction_details(
-        response_text: str,
+        response: str,
 ) -> InteractionResults:
     """
     Extract interaction details from a VLA response.
 
     Args:
-        response_text (str): The response text from the VLA.
+        response (str): The response text from the VLA.
 
     Returns:
         InteractionResults: The extracted interaction details.
     """
     try:
-        payload = {
-            "generated_reply": response_text,
-            "generated_metadata": {},
-            "guardrail_details": {},
-            "interaction_type": ""
-        }
+        payload = json.loads(response)
 
+        if not isinstance(payload, dict):
+            raise ValueError("[extract_interaction_details] response is not of type dict]")
+
+        # TODO-0: Add a template-based data loading for the response.
         return InteractionResults(
             generated_reply=payload.get("generated_reply", ""),
             generated_metadata=payload.get("generated_metadata", {}),
@@ -72,13 +72,14 @@ def extract_interaction_details(
         )
 
 
+@MonitoringAspect.monitor(name="interaction_request", category=MetricType.API_CALL)
 async def async_interaction_request(
         url: str,
         headers: Dict[str, str],
         payload: Dict[str, Any],
 ) -> Optional[httpx.Response]:
     """
-    Perform an asynchronous VLA request.
+    Perform an asynchronous interaction request.
 
     Args:
         url (str): The URL to send the request to.
@@ -86,22 +87,22 @@ async def async_interaction_request(
         payload (Dict[str, Any]): The payload to send in the request.
 
     Returns:
-        Optional[httpx.Response]: The response from the VLA request, or None if an error occurred.
+        Optional[httpx.Response]: The response from the interaction request, or None if an error occurred.
     """
     try:
-        logger.info(f"[async_vla_request] VLA request payload:\n{payload}\n---")
+        # logger.info(f"[async_interaction_request] Interaction request payload:\n{payload}\n---")
         async with httpx.AsyncClient(timeout=180) as client:
             response = await client.post(url=url, headers=headers, json=payload)
-            logger.info(f"[async_vla_request] VLA response:\n{response.text}\n---")
+            # logger.info(f"[async_interaction_request] Interaction response:\n{response.text}\n---")
             response.raise_for_status()
 
             return response
 
     except httpx.HTTPStatusError as http_err:
-        logger.error(f"[async_vla_request] HTTP error: {http_err.response.text}", exc_info=True)
+        logger.error(f"[async_interaction_request] HTTP error: {http_err.response.text}", exc_info=True)
 
     except httpx.RequestError as req_err:
-        logger.error(f"[async_vla_request] Request error: {str(req_err)}", exc_info=True)
+        logger.error(f"[async_interaction_request] Request error: {str(req_err)}", exc_info=True)
 
     return None
 
@@ -142,6 +143,12 @@ def parse_date_value(raw_date_value: Optional[str], default_date_value: Optional
         return default_date_value
 
 
+@MonitoringAspect.monitor(
+    name="average_calc",
+    category=MetricType.SCORING,
+    cached=True,
+    maxsize=1000
+)
 def calculate_average_scores(scores: Dict[str, List[float]]) -> Dict[str, float]:
     """
     Helper function that calculates the average scores for a dictionary of score lists.
@@ -158,6 +165,7 @@ def calculate_average_scores(scores: Dict[str, List[float]]) -> Dict[str, float]
     return {key: average(values) for key, values in scores.items()}
 
 
+@MonitoringAspect.monitor(name="summarization", category=MetricType.API_CALL)
 def summarize_verdicts(verdicts: List[str], judge: str, max_bullets: int = 5) -> List[str]:
     """
     Summarize the justifications for each judge.

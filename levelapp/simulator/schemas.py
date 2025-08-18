@@ -55,26 +55,7 @@ class ScriptsBatch(BaseModel):
     scripts: List[ConversationScript] = Field(default_factory=list, description="List of conversation scripts")
 
 
-# ---- Conversation Agent Configuration & Interaction Details Models ----
-class EndpointConfig(BaseModel):
-    url: HttpUrl
-    api_key: SecretStr
-    model_id: str | None
-    payload_template: Dict[str, Any] | None
-
-    @property
-    def headers(self) -> Dict[str, Any]:
-        return {
-            "x-api-key": self.api_key.get_secret_value(),
-            "Content-Type": "application/json",
-            "x-model-id": self.model_id
-        }
-
-    @property
-    def full_url(self) -> str:
-        return str(self.url)
-
-
+# ---- Interaction Details Models ----
 class InteractionResults(BaseModel):
     """Represents metadata extracted from a VLA interaction."""
     generated_reply: str | None = "No response"

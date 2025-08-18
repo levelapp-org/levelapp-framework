@@ -73,6 +73,7 @@ class StepContext:
         self._func_gen = None
 
     def __enter__(self):
+        logger.info(f"[StepContext] Starting step: {self.step_name}")
         with self.session.lock:
             self.step_meta = StepMetadata(
                 step_name=self.step_name,
@@ -112,7 +113,7 @@ class StepContext:
                 self.session.monitor.update_procedure_duration(name=self.full_step_name, value=self.step_meta.duration)
                 self.session.session_metadata.total_duration += self.step_meta.duration
 
-        logger.info(f"Completed step '{self.step_name}' in {self.step_meta.duration:.2f}s")
+        logger.info(f"[StepContext] Completed step: {self.step_name} in {self.step_meta.duration:.2f}s")
 
         return False  # Don't suppress exceptions
 
@@ -131,17 +132,17 @@ class EvaluationSession:
 
     def __enter__(self):
         self.session_metadata.started_at = datetime.now()
-        logger.info(f"Starting evaluation session: {self.session_name}")
+        logger.info(f"[EvaluationSession] Starting evaluation session: {self.session_name}")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.session_metadata.ended_at = datetime.now()
         logger.info(
-            f"Completed session '{self.session_name}' "
+            f"[EvaluationSession] Completed session '{self.session_name}' "
             f"in {self.session_metadata.duration:.2f}s"
         )
         if exc_type:
-            logger.error(f"Session ended with error: {exc_val}", exc_info=True)
+            logger.error(f"[EvaluationSession] Session ended with error: {exc_val}", exc_info=True)
         return False
 
     def step(self, step_name: str, category: MetricType = MetricType.CUSTOM) -> StepContext:

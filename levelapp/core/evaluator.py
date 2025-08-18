@@ -2,6 +2,7 @@
 import re
 import json
 import logging
+from collections import defaultdict
 from functools import lru_cache
 
 from typing import Dict, Any
@@ -18,7 +19,7 @@ from tenacity import (
 
 from levelapp.clients import ClientRegistry
 from levelapp.core.base import BaseEvaluator, BaseChatClient
-
+from levelapp.utils.monitoring import MonitoringAspect, MetricType
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,7 @@ Output only the JSON object and nothing else.
 class InteractionEvaluator(BaseEvaluator):
     def __init__(self):
         self.prompt_template = EVAL_PROMPT_TEMPLATE
+        self.clients = defaultdict(BaseChatClient)
 
     def register_client(self, provider: str, client: BaseChatClient):
         self.clients[provider] = client
@@ -133,7 +135,12 @@ class InteractionEvaluator(BaseEvaluator):
         wait=wait_exponential(multiplier=1, min=2, max=10),
         reraise=True,
     )
-    def evaluate(self, provider: str, generated_text: str, reference_text: str) -> Dict[str, Any]:
+    def evaluate(
+            self,
+            provider: str,
+            generated_text: str,
+            reference_text: str
+    ) -> JudgeEvaluationResults | None:
         prompt = self._build_prompt(generated_text=generated_text, reference_text=reference_text)
         client = ClientRegistry.get(provider=provider)
 
@@ -141,12 +148,18 @@ class InteractionEvaluator(BaseEvaluator):
             response = client.call(message=prompt)
             logger.info(f"[{provider}] Evaluation: {response}\n{'---' * 10}")
             # TODO-2: Validate response structure using Pydantic or similar.
-            return response
+            return JudgeEvaluationResults.from_raw(provider=provider, raw=response)
 
         except Exception as e:
             logger.error(f"[{provider}] Evaluation failed: {e}", exc_info=True)
-            return {"match_level": -1, "justification": f"Exception during evaluation: {str(e)}"}
+            return JudgeEvaluationResults(
+                provider=provider,
+                match_level=-1,
+                justification="Unable to parse response.",
+                raw_response={},
+            )
 
+    @MonitoringAspect.monitor(name="judge_evaluation", category=MetricType.API_CALL)
     async def async_evaluate(
             self,
             provider: str,
@@ -165,7 +178,7 @@ class InteractionEvaluator(BaseEvaluator):
             ):
                 with attempt:
                     response = await client.acall(message=prompt)
-                    logger.info(f"[{provider}] Async evaluation: (response type:{type(response)})\n{response}\n{'---' * 10}")
+                    # logger.info(f"[{provider}] Async evaluation: (response type:{type(response)})\n{response}\n{'---' * 10}")
                     return JudgeEvaluationResults.from_raw(provider=provider, raw=response)
 
         except RetryError as e:
@@ -174,5 +187,5 @@ class InteractionEvaluator(BaseEvaluator):
                 provider=provider,
                 match_level=-1,
                 justification="Unable to parse response.",
-                raw_response=response,
+                raw_response={},
             )
