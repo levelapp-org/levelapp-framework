@@ -51,9 +51,7 @@ class EndpointConfig(BaseModel):
         """Return fully prepared payload depending on template or full payload."""
         self.load_template()
         if not self.variables:
-            # Case 1: Already complete payload
-            raise ValueError("[EndpointConfig] No variables defined to populate the payload template")
-        # Case 2: Template substitution
+            return {}
         return self._replace_placeholders(self.payload_template, self.variables)
 
     @staticmethod
@@ -63,7 +61,7 @@ class EndpointConfig(BaseModel):
             if isinstance(_obj, str):
                 subst = Template(_obj).safe_substitute(variables)
                 if '$' in subst:
-                    logger.warning(f"[EndpointConfig] Unsubstituted placeholder in payload:\n{subst}\nn")
+                    logger.warning(f"[EndpointConfig] Unsubstituted placeholder in payload:\n{subst}\n\n")
                 return subst
 
             elif isinstance(_obj, dict):
@@ -76,6 +74,7 @@ class EndpointConfig(BaseModel):
 
         return _replace(obj)
 
+    # TODO-0: Use 'Path' for path configuration.
     def load_template(self, path: str | None = None) -> Dict[str, Any]:
         try:
             if not path:
@@ -95,7 +94,7 @@ class EndpointConfig(BaseModel):
                     raise ValueError("[EndpointConfig] Unsupported file format.")
 
                 self.payload_template = data
-                # TODO-0: Remove the return statement if not required.
+                # TODO-1: Remove the return statement if not required.
                 return data
 
         except FileNotFoundError as e:
@@ -112,15 +111,3 @@ class EndpointConfig(BaseModel):
 
         except Exception as e:
             raise ValueError(f"[EndpointConfig] Unexpected error loading configuration: {e}")
-
-
-if __name__ == '__main__':
-
-    cfg = EndpointConfig()
-    template_ = cfg.load_template(path="../../src/data/payload_example_1.yaml")
-
-    cfg.variables = {"user_message": "Hello, world!"}
-    payload = cfg.payload
-    print(f"payload with variables:\n{payload}\n\n")
-
-    print(f"Configuration dump:\n{cfg.model_dump()}")

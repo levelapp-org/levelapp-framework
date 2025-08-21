@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class BaseSimulator(ABC):
     """Abstract base class for simulator components."""
     @abstractmethod
-    def simulate(self):
+    def simulate(self, **kwargs):
         """Run a stress test simulation based on the provided configuration."""
         raise NotImplementedError
 
@@ -233,3 +233,33 @@ class BaseDatastore(ABC):
             data (Dict[str, Any]): Batch result data to store.
         """
         pass
+
+
+class BaseWorkflow(ABC):
+    """Abstract base class for evaluation workflows."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.config: Dict[str, Any] = {}
+        self.data: Any = None
+        self.results: Any = None
+
+    @abstractmethod
+    def setup(self, config: Dict[str, Any]) -> None:
+        """Validate and initialize workflow-specific settings."""
+        ...
+
+    @abstractmethod
+    def load_data(self, config: Dict[str, Any]) -> None:
+        """Load and preprocess input data."""
+        ...
+
+    @abstractmethod
+    def execute(self, config: Dict[str, Any]) -> None:
+        """Run the workflow evaluation steps."""
+        ...
+
+    @abstractmethod
+    def collect_results(self) -> Any:
+        """Return unified results structure."""
+        ...

@@ -1,15 +1,18 @@
 """levelapp/core/session.py"""
+import time
 import logging
 import threading
-import time
-
-from datetime import datetime
-from contextlib import contextmanager
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
 
-from levelapp.utils.monitoring import FunctionMonitor, MetricType, ExecutionMetrics
+from datetime import datetime
+from humanize import precisedelta
+
+from levelapp.core.base import BaseWorkflow
+from levelapp.core.workflow import SimulatorWorkflow
+from levelapp.utils.monitoring import FunctionMonitor, MetricType, ExecutionMetrics, MonitoringAspect
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +45,8 @@ class StepMetadata:
     """Metadata for a specific step within an evaluation session."""
     step_name: str
     session_name: str
-    started_at: float | None = None
-    ended_at: float | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     memory_peak_mb: float | None = None
     error_count: int = 0
     procedures_stats: List[ExecutionMetrics] | None = None
@@ -57,7 +60,7 @@ class StepMetadata:
     def duration(self) -> float | None:
         """Calculate the duration of the step in seconds."""
         if not self.is_active:
-            return self.ended_at - self.started_at
+            return (self.ended_at - self.started_at).total_seconds()
         return None
 
 
@@ -78,7 +81,7 @@ class StepContext:
             self.step_meta = StepMetadata(
                 step_name=self.step_name,
                 session_name=self.session.session_name,
-                started_at=time.perf_counter()
+                started_at=datetime.now()
             )
             self.session.session_metadata.steps[self.step_name] = self.step_meta
 
@@ -105,7 +108,7 @@ class StepContext:
             pass
 
         with self.session.lock:
-            self.step_meta.ended_at = time.perf_counter()
+            self.step_meta.ended_at = datetime.now()
             if exc_type:
                 self.step_meta.error_count += 1
             self.session.session_metadata.total_executions += 1
@@ -115,14 +118,31 @@ class StepContext:
 
         logger.info(f"[StepContext] Completed step: {self.step_name} in {self.step_meta.duration:.2f}s")
 
-        return False  # Don't suppress exceptions
+        return False
 
 
 class EvaluationSession:
     """Context manager for LLM evaluation sessions with integrated monitoring."""
-    def __init__(self, session_name: str, monitor: FunctionMonitor | None = None):
+    def __init__(
+            self,
+            session_name: str = "test-session",
+            monitor: FunctionMonitor | None = None,
+            workflow: BaseWorkflow | None = None
+    ):
+        """
+        Initialize Evaluation Session.
+
+        Args:
+            session_name (str): Name of the session
+            monitor (FunctionMonitor): Function monitoring aspect
+            workflow (BaseWorkflow): Selected workflow. Defaults to SimulatorWorkflow.
+        """
+        self._NAME = self.__class__.__name__
+
         self.session_name = session_name
-        self.monitor = monitor or FunctionMonitor()
+        self.monitor = monitor or MonitoringAspect
+        self.workflow = workflow or SimulatorWorkflow()
+
         self.session_metadata = SessionMetadata(session_name=session_name)
         self._lock = threading.RLock()
 
@@ -132,32 +152,46 @@ class EvaluationSession:
 
     def __enter__(self):
         self.session_metadata.started_at = datetime.now()
-        logger.info(f"[EvaluationSession] Starting evaluation session: {self.session_name}")
+        logger.info(
+            f"[{self._NAME}] Starting evaluation session: {self.session_name}"
+            f"[{self._NAME}] Workflow: '{self.workflow.name}'"
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.session_metadata.ended_at = datetime.now()
         logger.info(
-            f"[EvaluationSession] Completed session '{self.session_name}' "
+            f"[{self._NAME}] Completed session '{self.session_name}' "
             f"in {self.session_metadata.duration:.2f}s"
         )
         if exc_type:
-            logger.error(f"[EvaluationSession] Session ended with error: {exc_val}", exc_info=True)
+            logger.error(f"[{self._NAME}] Session ended with error: {exc_val}", exc_info=True)
         return False
 
     def step(self, step_name: str, category: MetricType = MetricType.CUSTOM) -> StepContext:
         """Create a monitored evaluation step."""
         return StepContext(self, step_name, category)
 
+    def run(self, config: Dict[str, Any]):
+        with self.step(step_name="setup", category=MetricType.SETUP):
+            self.workflow.setup(config=config)
+
+        with self.step(step_name="load_data", category=MetricType.DATA_LOADING):
+            self.workflow.load_data(config=config)
+
+        with self.step(step_name="execute", category=MetricType.EXECUTION):
+            self.workflow.execute(config=config)
+
+        with self.step(step_name=f"{self.session_name}.collect_results", category=MetricType.RESULTS_COLLECTION):
+            self.workflow.collect_results()
+
     def get_stats(self) -> Dict[str, Any]:
         return {
             "session": {
                 "name": self.session_name,
-                "duration": self.session_metadata.duration,
-                "start_time": self.session_metadata.started_at.isoformat()
-                if self.session_metadata.started_at else None,
-                "end_time": self.session_metadata.ended_at.isoformat()
-                if self.session_metadata.ended_at else None,
+                "duration": precisedelta(self.session_metadata.duration, suppress=['minutes']),
+                "start_time": self.session_metadata.started_at.isoformat(),
+                "end_time": self.session_metadata.ended_at.isoformat(),
                 "steps": len(self.session_metadata.steps),
                 "errors": sum(s.error_count for s in self.session_metadata.steps.values())
             },

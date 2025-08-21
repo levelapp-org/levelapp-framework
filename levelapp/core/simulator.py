@@ -1,18 +1,15 @@
 """
 'simulators/service.py': Service layer to manage conversation simulation and evaluation.
 """
-
-import asyncio
-import json
-import logging
 import time
+import asyncio
+import logging
 
-from uuid import UUID
-from collections import defaultdict
 from datetime import datetime
+from collections import defaultdict
 from typing import Dict, Any, List
 
-from .base import BaseDatastore
+from .base import BaseDatastore, BaseSimulator
 from .evaluator import InteractionEvaluator
 from ..config.interaction_request import EndpointConfig
 from ..simulator.schemas import (
@@ -29,14 +26,14 @@ from ..simulator.utils import (
 )
 
 
-class ConversationSimulator:
-    """Service to simulate conversations and evaluate interactions."""
+class ConversationSimulator(BaseSimulator):
+    """Conversation simulator component."""
 
     def __init__(
         self,
-        storage_service: BaseDatastore,
-        evaluation_service: InteractionEvaluator,
-        endpoint_configuration: EndpointConfig,
+        storage_service: BaseDatastore | None = None,
+        evaluation_service: InteractionEvaluator | None = None,
+        endpoint_configuration: EndpointConfig | None = None,
     ):
         """
         Initialize the ConversationSimulator.
@@ -46,10 +43,11 @@ class ConversationSimulator:
             evaluation_service (EvaluationService): Service for evaluating interactions.
             endpoint_configuration (EndpointConfig): Configuration object for VLA.
         """
-        self.evaluation_service = evaluation_service
-        self.storage_service = storage_service
-        self.endpoint_configuration = endpoint_configuration
         self.logger = logging.getLogger(__name__)
+
+        self.storage_service = storage_service
+        self.evaluation_service = evaluation_service
+        self.endpoint_configuration = endpoint_configuration
 
         self._url = endpoint_configuration.full_url
         self._credentials = endpoint_configuration.api_key.get_secret_value()
@@ -58,6 +56,16 @@ class ConversationSimulator:
         self.test_batch: ScriptsBatch | None = None
         self.evaluation_verdicts: Dict[str, List[str]] = defaultdict(list)
         self.verdict_summaries: Dict[str, List[str]] = defaultdict(list)
+
+    def simulate(self, **kwargs):
+        """Entry point."""
+        # TODO-0: Add entry point logic here.
+        asyncio.run(
+            self.run_batch_test(
+                test_batch=kwargs.get("test_batch"),
+                attempts=kwargs.get("attempts", 1)
+            )
+        )
 
     async def run_batch_test(
         self,

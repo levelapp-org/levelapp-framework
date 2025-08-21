@@ -6,19 +6,39 @@ from typing import Any, Dict, List, Tuple, Literal
 
 from pydantic import BaseModel
 
+from .base import BaseComparator
 from ..comparator.metrics import MetricsManager, ComparisonResults
 from ..comparator.schemas import EntityMetric, SetMetric
 from ..comparator.utils import format_evaluation_results
 
 
-class MetadataComparator:
-    def __init__(self, reference: BaseModel, extracted: BaseModel, metrics_manager: MetricsManager):
+class MetadataComparator(BaseComparator):
+    """Metadata comparator component."""
+
+    def __init__(
+            self,
+            reference: BaseModel | None = None,
+            extracted: BaseModel | None = None,
+            metrics_manager: MetricsManager | None = None,
+    ):
+        """
+        Initialize the MetadataComparator.
+
+        Args:
+            reference (BaseModel): Reference BaseModel
+            extracted (BaseModel): Extracted BaseModel
+            metrics_manager (MetricsManager): MetricsManager
+        """
         self.reference = reference
         self.extracted = extracted
         self.metrics_manager = metrics_manager
         self._evaluation_data: List[
             Tuple[str, list[str], list[str], Any, Any, Any, Any, float]
         ] = []
+
+    def compare(self):
+        # TODO-0: Implement the entry point logic here.
+        pass
 
     def _get_score(self, field: str) -> Tuple[EntityMetric, SetMetric, float]:
         """
