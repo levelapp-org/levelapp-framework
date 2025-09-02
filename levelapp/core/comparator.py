@@ -6,13 +6,13 @@ from typing import Any, Dict, List, Tuple, Literal
 
 from pydantic import BaseModel
 
-from .base import BaseComparator
-from ..comparator.metrics import MetricsManager, ComparisonResults
-from ..comparator.schemas import EntityMetric, SetMetric
-from ..comparator.utils import format_evaluation_results
+from levelapp.core.base import BaseProcess
+from levelapp.comparator.metrics import MetricsManager, ComparisonResults
+from levelapp.comparator.schemas import EntityMetric, SetMetric
+from levelapp.comparator.utils import format_evaluation_results
 
 
-class MetadataComparator(BaseComparator):
+class MetadataComparator(BaseProcess):
     """Metadata comparator component."""
 
     def __init__(
@@ -272,7 +272,7 @@ class MetadataComparator(BaseComparator):
 
             results[prefix] = comp_results or {"accuracy": 0}
 
-    def compare_metadata(self, indexed_mode: bool = False) -> Dict[int, Any]:
+    def run(self, indexed_mode: bool = False) -> Dict[int, Any]:
         """
         Launch a metadata comparison process between reference and extracted data.
 

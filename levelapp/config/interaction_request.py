@@ -15,23 +15,56 @@ load_dotenv()
 
 
 class EndpointConfig(BaseModel):
+    """
+    Configuration class for user system's endpoint.
+
+    Parameters:
+        base_url (HttpUrl): The base url of the endpoint.
+        method (Literal['POST', 'GET']): The HTTP method to use (POST or GET).
+        api_key (SecretStr): The API key to use.
+        bearer_token (SecretStr): The Bearer token to use.
+        model_id (str): The model to use (if applicable).
+        default_payload_template (Dict[str, Any]): The payload template to use.
+        generated_payload_template (Dict[str, Any]): The generated payload template from a provided file.
+        variables (Dict[str, Any]): The variables to populate the payload template.
+
+    Note:
+        Either you use the provided configuration YAML file, providing the following:\n
+        - base_url (HttpUrl): The base url of the endpoint.
+        - method (Literal['POST', 'GET']): The HTTP method to use (POST or GET).
+        - api_key (SecretStr): The API key to use.
+        - bearer_token (SecretStr): The Bearer token to use.
+        - model_id (str): The model to use (if applicable).
+        - default_payload_template (Dict[str, Any]): The payload template to use.
+        - generated_payload_template (Dict[str, Any]): The generated payload template from a provided file.
+        - variables (Dict[str, Any]): The variables to populate the payload template.
+
+        Or manually configure the model instance by assigning the proper values to the model fields.
+    """
+    # TODO-0: Adjust the code to support both GET and POST requests.
     # Required
-    base_url: HttpUrl = Field(default=HttpUrl(os.getenv('ENDPOINT_URL', '')))
     method: Literal["POST", "GET"] = Field(default="POST")
+    base_url: HttpUrl = Field(default=HttpUrl)
+    url_path: str = Field(default='')
 
     # Auth
-    api_key: SecretStr = Field(default=SecretStr(os.getenv('ENDPOINT_API_KEY', '')))
-    bearer_token: SecretStr = Field(default=SecretStr(os.getenv('BEARER_TOKEN', '')))
-    model_id: str = Field(default=os.getenv('MODEL_ID', ''))
+    api_key: SecretStr | None = Field(default=None)
+    bearer_token: SecretStr | None = Field(default=None)
+    model_id: str | None = Field(default='')
 
     # Data
-    payload_template: Dict[str, Any] = Field(default_factory=dict)
+    default_payload_template: Dict[str, Any] = Field(default_factory=dict)
+    generated_payload_template: Dict[str, Any] = Field(default_factory=dict)
+    default_response_template: Dict[str, Any] = Field(default_factory=dict)
+    generated_response_template: Dict[str, Any] = Field(default_factory=dict)
+
+    # Variables
     variables: Dict[str, Any] = Field(default_factory=dict)
 
     @computed_field()
     @property
     def full_url(self) -> str:
-        return str(self.base_url)
+        return str(self.base_url) + self.url_path
 
     @computed_field()
     @property
@@ -49,10 +82,14 @@ class EndpointConfig(BaseModel):
     @property
     def payload(self) -> Dict[str, Any]:
         """Return fully prepared payload depending on template or full payload."""
-        self.load_template()
         if not self.variables:
-            return {}
-        return self._replace_placeholders(self.payload_template, self.variables)
+            return self.default_payload_template
+
+        if not self.default_payload_template:
+            self.load_template()
+            return self._replace_placeholders(self.generated_payload_template, self.variables)
+
+        return self._replace_placeholders(self.default_payload_template, self.variables)
 
     @staticmethod
     def _replace_placeholders(obj: Any, variables: Dict[str, Any]) -> Dict[str, Any]:
@@ -81,7 +118,7 @@ class EndpointConfig(BaseModel):
                 path = os.getenv('PAYLOAD_PATH', '')
 
             if not os.path.exists(path):
-                raise FileNotFoundError(f"File not found: {path}")
+                raise FileNotFoundError(f"The provide payload template file path '{path}' does not exist.")
 
             with open(path, "r", encoding="utf-8") as f:
                 if path.endswith((".yaml", ".yml")):
@@ -93,21 +130,21 @@ class EndpointConfig(BaseModel):
                 else:
                     raise ValueError("[EndpointConfig] Unsupported file format.")
 
-                self.payload_template = data
+                self.generated_payload_template = data
                 # TODO-1: Remove the return statement if not required.
                 return data
 
         except FileNotFoundError as e:
-            raise FileNotFoundError(f"[EndpointConfig] Configuration file not found: {e}")
+            raise FileNotFoundError(f"[EndpointConfig] Payload template file '{e.filename}' not found in path.")
 
         except yaml.YAMLError as e:
-            raise ValueError(f"[EndpointConfig] Error parsing YAML file: {e}")
+            raise ValueError(f"[EndpointConfig] Error parsing YAML file:\n{e}")
 
         except json.JSONDecodeError as e:
-            raise ValueError(f"[EndpointConfig] Error parsing JSON file: {e}")
+            raise ValueError(f"[EndpointConfig] Error parsing JSON file:\n{e}")
 
         except IOError as e:
-            raise IOError(f"[EndpointConfig] Error reading file: {e}")
+            raise IOError(f"[EndpointConfig] Error reading file:\n{e}")
 
         except Exception as e:
-            raise ValueError(f"[EndpointConfig] Unexpected error loading configuration: {e}")
+            raise ValueError(f"[EndpointConfig] Unexpected error loading configuration:\n{e}")

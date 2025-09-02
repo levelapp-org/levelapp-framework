@@ -1,6 +1,8 @@
 """levelapp/core/base.py"""
+import asyncio
 import datetime
 import json
+
 import httpx
 import requests
 import logging
@@ -8,24 +10,18 @@ import logging
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
-from typing import Dict, Any, Callable
+from typing import List, Dict, Any, Callable, TypeVar, Type
 
 logger = logging.getLogger(__name__)
 
+Model = TypeVar("Model", bound=BaseModel)
+Context = TypeVar("Context")
 
-class BaseSimulator(ABC):
-    """Abstract base class for simulator components."""
+
+class BaseProcess(ABC):
+    """Interface for the evaluation classes."""
     @abstractmethod
-    def simulate(self, **kwargs):
-        """Run a stress test simulation based on the provided configuration."""
-        raise NotImplementedError
-
-
-class BaseComparator(ABC):
-    """Abstract base class for comparator components."""
-    @abstractmethod
-    def compare(self):
-        """Compare system output against reference output."""
+    def run(self, **kwargs) -> Any:
         raise NotImplementedError
 
 
@@ -167,99 +163,109 @@ class BaseMetric(ABC):
         }
 
 
-class BaseDatastore(ABC):
-    """Abstract base class for data stores."""
+class BaseRepository(ABC):
+    """
+    Abstract base class for pluggable NoSQL data stores.
+    Supports document-based operations with Pydantic model parsing.
+    """
+
     @abstractmethod
-    def fetch_document(
+    def connect(self) -> None:
+        """Initialize connection or client."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def close(self) -> None:
+        """Close connection or client."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def retrieve_document(
             self,
-            user_id: str,
             collection_id: str,
+            section_id: str,
+            sub_collection_id: str,
             document_id: str,
-            doc_type: str
-    ) -> BaseModel:
+            model_type: Type[Model]
+    ) -> Model | None:
         """
         Retrieve and parse a document from the datastore based on its type.
 
         Args:
-            user_id (str): ID of the user.
-            collection_id (str): Name of the collection.
-            document_id (str): ID of the document to retrieve.
-            doc_type (str): Type of document (e.g., scenario, bundle).
+            collection_id (str): Collection reference.
+            section_id (str): Section reference.
+            sub_collection_id (str): Sub-collection reference.
+            document_id (str): Reference of the document to retrieve.
+            model_type (Type[BaseModel]): Pydantic class to instantiate.
 
         Returns:
-            BaseModel: Parsed Pydantic model representing the document.
+            Parsed model instance or None if document was not found.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    def fetch_stored_results(
+    def store_document(
             self,
-            user_id: str,
             collection_id: str,
-            project_id: str,
-            category_id: str,
-            batch_id: str
-    ) -> Dict[str, Any]:
-        """
-        Retrieve stored batch results for a specific user and batch ID.
-
-        Args:
-            user_id (str): ID of the user.
-            collection_id (str): Main collection name.
-            project_id (str): Project identifier.
-            category_id (str): Category/sub-collection name.
-            batch_id (str): Batch identifier.
-
-        Returns:
-            Dict[str, Any]: Dictionary containing the stored result data.
-        """
-        pass
-
-    @abstractmethod
-    def save_batch_test_results(
-            self,
-            user_id: str,
-            project_id: str,
-            batch_id: str,
-            data: Dict[str, Any]
+            section_id: str,
+            sub_collection_id: str,
+            document_id: str,
+            data: Model
     ) -> None:
         """
-        Store batch test results in the datastore for a specific user and batch.
+        Store a pydantic model instance as a document.
 
         Args:
-            user_id (str): ID of the user.
-            project_id (str): Project identifier.
-            batch_id (str): Batch identifier (used as document ID).
-            data (Dict[str, Any]): Batch result data to store.
+            collection_id (str): Collection reference.
+            section_id (str): Section reference.
+            sub_collection_id (str): Sub-collection reference.
+            document_id (str): Reference of the document to store.
+            data (Model): Pydantic model instance.
         """
-        pass
-
-
-class BaseWorkflow(ABC):
-    """Abstract base class for evaluation workflows."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self.config: Dict[str, Any] = {}
-        self.data: Any = None
-        self.results: Any = None
+        raise NotImplementedError
 
     @abstractmethod
-    def setup(self, config: Dict[str, Any]) -> None:
-        """Validate and initialize workflow-specific settings."""
-        ...
+    def query_collection(
+            self,
+            collection_id: str,
+            section_id: str,
+            sub_collection_id: str,
+            filters: Dict[str, Any],
+            model_type: Type[Model]
+    ) -> List[Model]:
+        """
+        Query documents in a collection with optional filters.
+
+        Args:
+            collection_id (str): Collection reference.
+            section_id (str): Section reference.
+            sub_collection_id (str): Sub-collection reference.
+            filters (Dict[str, Any]): Filters to apply to the query (implementation dependent).
+            model_type (Type[BaseModel]): Pydantic class to instantiate.
+
+        Returns:
+            List[Model]: Query results.
+        """
+        raise NotImplementedError
 
     @abstractmethod
-    def load_data(self, config: Dict[str, Any]) -> None:
-        """Load and preprocess input data."""
-        ...
+    def delete_document(
+            self,
+            collection_id: str,
+            section_id: str,
+            sub_collection_id: str,
+            document_id: str
+    ) -> bool:
+        """
+        Delete a document.
 
-    @abstractmethod
-    def execute(self, config: Dict[str, Any]) -> None:
-        """Run the workflow evaluation steps."""
-        ...
+        Args:
+            collection_id (str): Collection reference.
+            section_id (str): Section reference.
+            sub_collection_id (str): Sub-collection reference.
+            document_id (str): Reference of the document to delete.
 
-    @abstractmethod
-    def collect_results(self) -> Any:
-        """Return unified results structure."""
-        ...
+        Returns:
+            True if deleted, False if not.
+        """
+        raise NotImplementedError

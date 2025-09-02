@@ -9,8 +9,7 @@ from datetime import datetime
 from collections import defaultdict
 from typing import Dict, Any, List
 
-from .base import BaseDatastore, BaseSimulator
-from .evaluator import InteractionEvaluator
+from .base import BaseRepository, BaseProcess, BaseEvaluator
 from ..config.interaction_request import EndpointConfig
 from ..simulator.schemas import (
     InteractionEvaluationResults,
@@ -26,48 +25,60 @@ from ..simulator.utils import (
 )
 
 
-class ConversationSimulator(BaseSimulator):
+class ConversationSimulator(BaseProcess):
     """Conversation simulator component."""
 
     def __init__(
         self,
-        storage_service: BaseDatastore | None = None,
-        evaluation_service: InteractionEvaluator | None = None,
-        endpoint_configuration: EndpointConfig | None = None,
+        repository: BaseRepository | None = None,
+        evaluator: BaseEvaluator | None = None,
+        endpoint_config: EndpointConfig | None = None,
     ):
         """
         Initialize the ConversationSimulator.
 
         Args:
-            storage_service (BaseDatastore): Service for saving simulation results.
-            evaluation_service (EvaluationService): Service for evaluating interactions.
-            endpoint_configuration (EndpointConfig): Configuration object for VLA.
+            repository (BaseRepository): Service for saving simulation results.
+            evaluator (EvaluationService): Service for evaluating interactions.
+            endpoint_config (EndpointConfig): Configuration object for VLA.
         """
         self.logger = logging.getLogger(__name__)
 
-        self.storage_service = storage_service
-        self.evaluation_service = evaluation_service
-        self.endpoint_configuration = endpoint_configuration
+        self.repository = repository
+        self.evaluator = evaluator
+        self.endpoint_config = endpoint_config
 
-        self._url = endpoint_configuration.full_url
-        self._credentials = endpoint_configuration.api_key.get_secret_value()
-        self._headers = endpoint_configuration.headers
+        self._url: str | None = None
+        self._credentials: str | None = None
+        self._headers: Dict[str, Any] | None = None
 
         self.test_batch: ScriptsBatch | None = None
         self.evaluation_verdicts: Dict[str, List[str]] = defaultdict(list)
         self.verdict_summaries: Dict[str, List[str]] = defaultdict(list)
 
-    def simulate(self, **kwargs):
-        """Entry point."""
-        # TODO-0: Add entry point logic here.
-        asyncio.run(
-            self.run_batch_test(
-                test_batch=kwargs.get("test_batch"),
-                attempts=kwargs.get("attempts", 1)
-            )
-        )
+    def setup(
+            self,
+            repository: BaseRepository,
+            evaluator: BaseEvaluator,
+            endpoint_config: EndpointConfig,
+    ) -> None:
+        """
+        Initialize the ConversationSimulator.
 
-    async def run_batch_test(
+        Args:
+            repository (BaseRepository): Repository object for storing simulation results.
+            evaluator (BaseEvaluator): Evaluator object for evaluating interactions.
+            endpoint_config (EndpointConfig): Configuration object for VLA.
+        """
+        self.repository = repository
+        self.evaluator = evaluator
+        self.endpoint_config = endpoint_config
+
+        self._url = endpoint_config.full_url
+        self._credentials = endpoint_config.api_key.get_secret_value()
+        self._headers = endpoint_config.headers
+
+    async def run(
         self,
         test_batch: ScriptsBatch,
         attempts: int = 1,
@@ -82,7 +93,7 @@ class ConversationSimulator(BaseSimulator):
         Returns:
             Dict[str, Any]: The results of the batch test.
         """
-        self.logger.info("[run_batch_test] Starting batch test for batch.")
+        self.logger.info(f"[run_batch_test] Starting batch test (attempts: {attempts}).")
         started_at = datetime.now()
 
         self.test_batch = test_batch
@@ -262,11 +273,11 @@ class ConversationSimulator(BaseSimulator):
 
         for interaction in interactions:
             user_message = interaction.user_message
-            self.endpoint_configuration.variables = {"user_message": user_message}
-            payload = self.endpoint_configuration.payload
+            self.endpoint_config.variables = {"user_message": user_message}
+            payload = self.endpoint_config.payload
             response = await async_interaction_request(
-                url=self.endpoint_configuration.full_url,
-                headers=self.endpoint_configuration.headers,
+                url=self.endpoint_config.full_url,
+                headers=self.endpoint_config.headers,
                 payload=payload,
             )
             reference_reply = interaction.reference_reply
@@ -356,13 +367,13 @@ class ConversationSimulator(BaseSimulator):
         Returns:
             InteractionEvaluationResults: The evaluation results.
         """
-        openai_eval_task = self.evaluation_service.async_evaluate(
+        openai_eval_task = self.evaluator.async_evaluate(
             provider="openai",
             generated_text=generated_reply,
             reference_text=reference_reply,
         )
 
-        ionos_eval_task = self.evaluation_service.async_evaluate(
+        ionos_eval_task = self.evaluator.async_evaluate(
             provider="ionos",
             generated_text=generated_reply,
             reference_text=reference_reply,
