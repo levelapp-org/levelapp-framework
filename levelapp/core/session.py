@@ -1,5 +1,4 @@
 """levelapp/core/session.py"""
-import time
 import logging
 import threading
 
@@ -9,10 +8,10 @@ from typing import Dict, List, Any
 from datetime import datetime
 from humanize import precisedelta
 
-from levelapp.core.base import BaseWorkflow
-from levelapp.core.workflow import SimulatorWorkflow
 from levelapp.utils.monitoring import FunctionMonitor, MetricType, ExecutionMetrics, MonitoringAspect
-
+from levelapp.workflow import WorkflowType, MainFactory
+from levelapp.workflow.base import BaseWorkflow
+from levelapp.workflow.entities import WorkflowConfig, WorkflowContext
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +126,7 @@ class EvaluationSession:
             self,
             session_name: str = "test-session",
             monitor: FunctionMonitor | None = None,
-            workflow: BaseWorkflow | None = None
+            workflow_config: WorkflowConfig | None = None
     ):
         """
         Initialize Evaluation Session.
@@ -135,13 +134,16 @@ class EvaluationSession:
         Args:
             session_name (str): Name of the session
             monitor (FunctionMonitor): Function monitoring aspect
-            workflow (BaseWorkflow): Selected workflow. Defaults to SimulatorWorkflow.
+            workflow_config (WorkflowConfig): Workflow configuration.
         """
         self._NAME = self.__class__.__name__
 
         self.session_name = session_name
         self.monitor = monitor or MonitoringAspect
-        self.workflow = workflow or SimulatorWorkflow()
+        self.workflow_config = workflow_config
+        self.workflow_type = workflow_config.workflow
+
+        self.workflow: BaseWorkflow | None = None
 
         self.session_metadata = SessionMetadata(session_name=session_name)
         self._lock = threading.RLock()
@@ -152,9 +154,24 @@ class EvaluationSession:
 
     def __enter__(self):
         self.session_metadata.started_at = datetime.now()
+
+        # Instantiate workflow if not already
+        if not self.workflow:
+            if not self.workflow_config:
+                raise ValueError(f"{self._NAME}: Workflow configuration must be provided")
+
+            context = WorkflowContext(
+                config=self.workflow_config,
+                repository=MainFactory.create_repository(self.workflow_config),
+                evaluator=MainFactory.create_evaluator(self.workflow_config),
+                endpoint_config=self.workflow_config.endpoint_config,
+                inputs=self.workflow_config.inputs
+            )
+            self.workflow = MainFactory.create_workflow(self.workflow_type, context)
+
         logger.info(
-            f"[{self._NAME}] Starting evaluation session: {self.session_name}"
-            f"[{self._NAME}] Workflow: '{self.workflow.name}'"
+            f"[{self._NAME}] Starting evaluation session: {self.session_name}, "
+            f"Workflow: '{self.workflow.name}'"
         )
         return self
 
@@ -164,6 +181,7 @@ class EvaluationSession:
             f"[{self._NAME}] Completed session '{self.session_name}' "
             f"in {self.session_metadata.duration:.2f}s"
         )
+
         if exc_type:
             logger.error(f"[{self._NAME}] Session ended with error: {exc_val}", exc_info=True)
         return False
@@ -172,15 +190,18 @@ class EvaluationSession:
         """Create a monitored evaluation step."""
         return StepContext(self, step_name, category)
 
-    def run(self, config: Dict[str, Any]):
+    def run(self):
+        if not self.workflow:
+            raise RuntimeError(f"{self._NAME} Workflow not initialized")
+
         with self.step(step_name="setup", category=MetricType.SETUP):
-            self.workflow.setup(config=config)
+            self.workflow.setup()
 
         with self.step(step_name="load_data", category=MetricType.DATA_LOADING):
-            self.workflow.load_data(config=config)
+            self.workflow.load_data()
 
         with self.step(step_name="execute", category=MetricType.EXECUTION):
-            self.workflow.execute(config=config)
+            self.workflow.execute()
 
         with self.step(step_name=f"{self.session_name}.collect_results", category=MetricType.RESULTS_COLLECTION):
             self.workflow.collect_results()

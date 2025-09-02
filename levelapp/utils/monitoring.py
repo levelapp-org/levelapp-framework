@@ -3,6 +3,8 @@ import time
 import logging
 import threading
 import tracemalloc
+import weakref
+from contextlib import contextmanager
 
 from enum import Enum
 from collections import defaultdict
@@ -10,7 +12,7 @@ from dataclasses import dataclass, fields
 from typing import List, Dict, Callable, Any, Union, ParamSpec, TypeVar, runtime_checkable, Protocol, Type
 
 from threading import RLock
-from functools import wraps
+from functools import wraps, lru_cache
 from datetime import datetime, timedelta
 from humanize import precisedelta, naturalsize
 
@@ -55,19 +57,24 @@ class ExecutionMetrics:
             self.duration = (self.end_time - self.start_time).total_seconds()
 
     def update_duration(self, value: float) -> None:
+        """Update duration with explicit value."""
+        if value < 0:
+            raise ValueError("Duration value cannot be negative.")
         self.duration = value
 
     def to_dict(self) -> dict:
         """Returns the content of the ExecutionMetrics as a structured dictionary."""
         metrics_dict = {}
-        for field in fields(self):
-            value = getattr(self, field.name)
+        for field_info in fields(self):
+            value = getattr(self, field_info.name)
 
             # Special handling for enum types to convert them to their value
             if isinstance(value, Enum):
-                metrics_dict[field.name] = value.name
+                metrics_dict[field_info.name] = value.name
+            elif isinstance(value, datetime):
+                metrics_dict[field_info.name] = value.isoformat()
             else:
-                metrics_dict[field.name] = value
+                metrics_dict[field_info.name] = value
 
         return metrics_dict
 
@@ -77,7 +84,7 @@ class AggregatedStats:
     """Aggregated metrics for monitored functions."""
     total_calls: int = 0
     total_duration: float = 0.0
-    min_duration: float = 0.0
+    min_duration: float = float('inf')
     max_duration: float = 0.0
     error_count: int = 0
     cache_hits: int = 0
@@ -87,11 +94,16 @@ class AggregatedStats:
     def update(self, metrics: ExecutionMetrics) -> None:
         """Update aggregated metrics with new execution metrics."""
         self.recent_call = datetime.now()
+        self.total_calls += 1
 
-        if metrics.duration:
-            self.total_calls += 1
+        if metrics.duration is not None:
             self.total_duration += metrics.duration
-            self.min_duration = min(self.min_duration, metrics.duration)
+
+            if self.min_duration == float('inf'):
+                self.min_duration = metrics.duration
+            else:
+                self.min_duration = min(self.min_duration, metrics.duration)
+
             self.max_duration = max(self.max_duration, metrics.duration)
 
         if metrics.error:
@@ -135,31 +147,54 @@ class MetricsCollector(Protocol):
 class MemoryTracker(MetricsCollector):
     """Memory usage metrics collector."""
     def __init__(self):
-        self.collect_metrics: ExecutionMetrics | None = None
         self._tracking = False
+        self._lock = threading.Lock()
+
+    @contextmanager
+    def _ensure_tracking(self):
+        """Context manager to ensure tracemalloc is properly managed."""
+        with self._lock:
+            if not self._tracking:
+                tracemalloc.start()
+                self._tracking = True
+        try:
+            yield
+        finally:
+            pass
 
     def collect_before(self, collected_metrics: ExecutionMetrics) -> ExecutionMetrics:
-        if not self._tracking:
-            tracemalloc.start()
-            self._tracking = True
+        with self._ensure_tracking():
+            try:
+                current, _ = tracemalloc.get_traced_memory()
+                collected_metrics.memory_before = current
 
-        current, peak = tracemalloc.get_traced_memory()
-        collected_metrics.memory_before = current
-        collected_metrics.memory_after = peak
-        return collected_metrics
+            except Exception as e:
+                logger.warning(f"[MemoryTracker] Memory tracking failed: {e}")
+
+            return collected_metrics
 
     def collect_after(self, collected_metrics: ExecutionMetrics) -> ExecutionMetrics:
         if self._tracking:
-            current, peak = tracemalloc.get_traced_memory()
-            collected_metrics.memory_before = current / 10 ** 6
-            collected_metrics.memory_after = peak / 10 ** 6
-            return collected_metrics
+            try:
+                current, peak = tracemalloc.get_traced_memory()
+                collected_metrics.memory_after = current
+                collected_metrics.memory_peak = peak
+                return collected_metrics
 
+            except Exception as e:
+                logger.warning(f"Memory tracking failed: {e}")
         return collected_metrics
 
-    def __del__(self):
-        if self._tracking:
-            tracemalloc.stop()
+    def cleanup(self):
+        """Explicit cleanup method."""
+        with self._lock:
+            if self._tracking:
+                try:
+                    tracemalloc.stop()
+                except Exception as e:
+                    logger.warning(f"Failed to stop tracemalloc: {e}")
+                finally:
+                    self._tracking = False
 
 
 class APICallTracker(MetricsCollector):
@@ -175,7 +210,8 @@ class APICallTracker(MetricsCollector):
     def collect_after(self, collected_metrics: ExecutionMetrics) -> ExecutionMetrics:
         with self._lock:
             if collected_metrics.category == MetricType.API_CALL:
-                collected_metrics.total_api_calls += 1
+                self._api_calls[collected_metrics.procedure] += 1
+                collected_metrics.total_api_calls = self._api_calls[collected_metrics.procedure]
 
         return collected_metrics
 
@@ -185,10 +221,13 @@ class FunctionMonitor:
 
     def __init__(self, max_history: int = 1000):
         self._lock = RLock()
+        self._max_history = max_history
         self._monitored_procedures: Dict[str, Callable[..., Any]] = {}
         self._execution_history: Dict[str, List[ExecutionMetrics]] = defaultdict(list)
         self._aggregated_stats: Dict[str, AggregatedStats] = defaultdict(AggregatedStats)
+
         self._collectors: List[MetricsCollector] = []
+
         self.add_collector(MemoryTracker())
         self.add_collector(APICallTracker())
 
@@ -201,12 +240,16 @@ class FunctionMonitor:
             value: The value to retrieve for the procedure.
         """
         with self._lock:
-            history = self._execution_history[name]
+            history = self._execution_history.get(name, [])
             if not history:
+                logger.warning(f"[FunctionMonitor] ne execution history found for proc: {name}")
                 return
 
+            latest_entry = history[-1]
+            latest_entry.update_duration(value=value)
+            self._aggregated_stats[name] = AggregatedStats()
+
             for entry in history:
-                entry.update_duration(value=value)
                 self._aggregated_stats[name].update(metrics=entry)
 
     def add_collector(self, collector: MetricsCollector) -> None:
@@ -230,33 +273,26 @@ class FunctionMonitor:
             if collector in self._collectors:
                 self._collectors.remove(collector)
 
-    def _collect_metrics_before(self, execution_metrics: ExecutionMetrics) -> Dict[str, ExecutionMetrics]:
-        """
-        Collect metrics before function execution using registered collectors.
-        """
-        metrics = defaultdict(ExecutionMetrics)
+    def _collect_metrics_before(self, execution_metrics: ExecutionMetrics) -> ExecutionMetrics:
+        """Collect metrics before function execution using registered collectors."""
+        result_metrics = execution_metrics
         for collector in self._collectors:
             try:
-                collected_before = collector.collect_before(collected_metrics=execution_metrics)
-                metrics.update({collector.__class__.__name__: collected_before})
+                result_metrics = collector.collect_before(result_metrics)
             except Exception as e:
-                logger.warning(f"[FunctionMonitor] Metrics collector failed: {e}")
+                logger.warning(f"Metrics collector {type(collector).__name__} failed: {e}")
 
-        return metrics
+        return result_metrics
 
-    def _collect_metrics_after(self, execution_metrics: ExecutionMetrics) -> Dict[str, ExecutionMetrics]:
-        """
-        Collect metrics after function execution using registered collectors.
-        """
-        metrics = {}
+    def _collect_metrics_after(self, execution_metrics: ExecutionMetrics) -> ExecutionMetrics:
+        """Collect metrics after function execution using registered collectors."""
+        result_metrics = execution_metrics
         for collector in self._collectors:
             try:
-                collected_after = collector.collect_after(collected_metrics=execution_metrics)
-                metrics.update({collector.__class__.__name__: collected_after})
+                result_metrics = collector.collect_after(result_metrics)
             except Exception as e:
-                logger.warning(f"[FunctionMonitor] Metrics collector failed: {e}")
-
-        return metrics
+                logger.warning(f"Metrics collector {type(collector).__name__} failed: {e}")
+        return result_metrics
 
     @staticmethod
     def _apply_caching(func: Callable[P, T], maxsize: int | None) -> Callable[P, T]:
@@ -326,10 +362,6 @@ class FunctionMonitor:
         """
         @wraps(func)
         def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
-            # Initialize execution metadata
-            exec_metadata = {'procedure': name, 'category': category}
-
-            # Initialize execution metrics
             metrics = ExecutionMetrics(
                 procedure=name,
                 category=category,
@@ -339,20 +371,15 @@ class FunctionMonitor:
                 metrics.start_time = datetime.now()
 
             # Collect pre-execution metrics
-            if track_memory and self._collectors:
+            if track_memory:
                 self._collect_metrics_before(execution_metrics=metrics)
 
             try:
                 result = func(*args, **kwargs)
 
-                # Collect post-execution metrics
-                if track_memory and self._collectors:
-                    # Check for cache hit
-                    cache_hit_info = getattr(func, 'cache_hit_info', None)
-                    if hasattr(func, 'cache_info') and cache_hit_info is not None:
-                        metrics.cache_hit = getattr(cache_hit_info, 'is_hit', False)
-
-                    self._collect_metrics_after(execution_metrics=metrics)
+                cache_hit_info = getattr(func, 'cache_hit_info', None)
+                if hasattr(func, 'cache_info') and cache_hit_info is not None:
+                    metrics.cache_hit = getattr(cache_hit_info, 'is_hit', False)
 
                 return result
 
@@ -362,15 +389,24 @@ class FunctionMonitor:
                 raise
 
             finally:
-                metrics.end_time = datetime.now()
-                metrics.finalize()
+                if enable_timing:
+                    metrics.end_time = datetime.now()
+                    metrics.finalize()
+
+                if track_memory:
+                    metrics = self._collect_metrics_after(execution_metrics=metrics)
 
                 # store metrics
                 with self._lock:
-                    self._execution_history[name].append(metrics)
-                    self._aggregated_stats[name].update(metrics)
+                    history = self._execution_history[name]
+                    history.append(metrics)
 
-                if enable_timing and metrics.duration:
+                    if len(history) > self._max_history:
+                        history.pop(0)
+
+                    self._aggregated_stats[name].update(metrics=metrics)
+
+                if enable_timing and metrics.duration is not None:
                     log_message = f"[FunctionMonitor] Executed '{name}' in {metrics.duration:.4f}s"
                     if metrics.cache_hit:
                         log_message += " (cache hit)"
@@ -383,7 +419,7 @@ class FunctionMonitor:
     def monitor(
             self,
             name: str,
-            category: MetricType,
+            category: MetricType = MetricType.CUSTOM,
             cached: bool = False,
             maxsize: int | None = 128,
             enable_timing: bool = True,
@@ -457,7 +493,8 @@ class FunctionMonitor:
 
             func = self._monitored_procedures[name]
             stats = self._aggregated_stats[name]
-            history = self._execution_history[name]
+
+            min_duration = stats.min_duration if stats.min_duration != float('inf') else 0.0
 
             return {
                 'name': name,
@@ -465,23 +502,23 @@ class FunctionMonitor:
                 'avg_duration': precisedelta(
                     timedelta(seconds=stats.average_duration),
                     suppress=['minutes'],
-                    format='%.3f'
-                ),
+                    format='%.4f'
+                ) if stats.average_duration >0 else "0.000s",
                 'min_duration': precisedelta(
-                    timedelta(seconds=stats.min_duration),
+                    timedelta(seconds=min_duration),
                     suppress=['minutes'],
-                    format='%.3f'
+                    format='%.4f'
                 ),
                 'max_duration': precisedelta(
                     timedelta(seconds=stats.max_duration),
                     suppress=['minutes'],
-                    format='%.3f'
+                    format='%.4f'
                 ),
-                'error_rate': stats.error_rate,
-                'cache_hit_rate': stats.cache_hit_rate,
-                'memory_peak_mb': naturalsize(stats.memory_peak),
-                'last_called': stats.recent_call.isoformat(),
-                'recent_execution': stats.recent_call.isoformat(),
+                'error_rate': f"{stats.error_rate:.2f}%",
+                'cache_hit_rate': f"{stats.cache_hit_rate}%",
+                'memory_peak_mb': naturalsize(stats.memory_peak) if stats.memory_peak > 0 else "0 B",
+                'last_called': stats.recent_call.isoformat() if stats.recent_call else None,
+                'recent_execution': stats.recent_call.isoformat() if stats.recent_call else None,
                 'is_cached': hasattr(func, 'cache_info'),
                 'cache_info': func.cache_info() if hasattr(func, 'cache_info') else None
             }
@@ -552,6 +589,16 @@ class FunctionMonitor:
             return json.dumps(data, indent=2, default=str)
         else:
             raise ValueError(f"Unsupported format: {output_format}")
+
+    def cleanup(self):
+        """Cleanup resources."""
+        with self._lock:
+            for collector in self._collectors:
+                if hasattr(collector, 'cleanup'):
+                    try:
+                        collector.cleanup()
+                    except Exception as e:
+                        logger.warning(f"Collector cleanup failed: {e}")
 
 
 MonitoringAspect = FunctionMonitor()

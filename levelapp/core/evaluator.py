@@ -114,7 +114,7 @@ Output only the JSON object and nothing else.
 """
 
 
-class InteractionEvaluator(BaseEvaluator):
+class JudgeEvaluator(BaseEvaluator):
     def __init__(self):
         self.prompt_template = EVAL_PROMPT_TEMPLATE
         self.clients = defaultdict(BaseChatClient)
@@ -178,7 +178,7 @@ class InteractionEvaluator(BaseEvaluator):
             ):
                 with attempt:
                     response = await client.acall(message=prompt)
-                    # logger.info(f"[{provider}] Async evaluation: (response type:{type(response)})\n{response}\n{'---' * 10}")
+                    logger.info(f"[{provider}] Async evaluation: (response type:{type(response)})\n{response}\n{'---' * 10}")
                     return JudgeEvaluationResults.from_raw(provider=provider, raw=response)
 
         except RetryError as e:
