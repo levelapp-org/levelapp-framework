@@ -8,7 +8,7 @@ from levelapp.clients.ionos import IonosClient
 from levelapp.clients.mistral import MistralClient
 from levelapp.clients.openai import OpenAIClient
 from levelapp.core.base import BaseChatClient
-from levelapp.utils.monitoring import FunctionMonitor
+from levelapp.aspects.monitor import FunctionMonitor
 
 logger = logging.getLogger(__name__)
 dotenv.load_dotenv()

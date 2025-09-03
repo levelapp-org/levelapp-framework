@@ -5,7 +5,7 @@ from unittest.mock import patch
 from io import StringIO
 from threading import Thread
 from inspect import signature
-from levelapp.utils.monitoring import FunctionMonitor
+from levelapp.aspects.monitor import FunctionMonitor
 
 
 class TestFunctionMonitor(unittest.TestCase):
@@ -16,11 +16,11 @@ class TestFunctionMonitor(unittest.TestCase):
         self.log_stream = StringIO()
         self.handler = logging.StreamHandler(self.log_stream)
         self.handler.setLevel(logging.DEBUG)
-        logging.getLogger('levelapp.utils.monitoring').addHandler(self.handler)
+        logging.getLogger('levelapp.aspects.monitoring').addHandler(self.handler)
 
     def tearDown(self):
         # Clean up logging
-        logging.getLogger('levelapp.utils.monitoring').removeHandler(self.handler)
+        logging.getLogger('levelapp.aspects.monitoring').removeHandler(self.handler)
         self.handler.close()
 
     def test_basic_function_execution(self):

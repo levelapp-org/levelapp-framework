@@ -1,4 +1,4 @@
-"""levelapp/config/interaction_request.py"""
+"""levelapp/config/endpoint.py"""
 import os
 import json
 import yaml

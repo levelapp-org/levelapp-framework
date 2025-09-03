@@ -19,7 +19,7 @@ from tenacity import (
 
 from levelapp.clients import ClientRegistry
 from levelapp.core.base import BaseEvaluator, BaseChatClient
-from levelapp.utils.monitoring import MonitoringAspect, MetricType
+from levelapp.aspects.monitor import MonitoringAspect, MetricType
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ class JudgeEvaluationResults(BaseModel):
             return int(v)
         return v
 
+    # TODO-0: Place the output parsing logic for each client into its own class/module.
     @classmethod
     def from_raw(cls, provider: str, raw: Dict[str, Any]) -> "JudgeEvaluationResults":
         """
@@ -87,7 +88,7 @@ class JudgeEvaluationResults(BaseModel):
         return re.sub(r"^(```[a-zA-Z]*\n?)$", "", text.strip(), flags=re.MULTILINE)
 
 
-# TODO-0: Move this to a separate file.
+# TODO-1: Move this to 'aspects/prompts.py'.
 EVAL_PROMPT_TEMPLATE = """
 Your task is to evaluate how well the agent's generated text matches the expected text.
 Use the following classification criteria:

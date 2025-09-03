@@ -1,10 +1,10 @@
 from typing import Callable
-from levelapp.workflow.entities import WorkflowType, RepositoryType, EvaluatorType, WorkflowConfig, WorkflowContext
+from levelapp.workflow.schemas import WorkflowType, RepositoryType, EvaluatorType, WorkflowConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.base import BaseWorkflow
 
 from levelapp.repository.firestore import FirestoreRepository
-from levelapp.core.evaluator import JudgeEvaluator
+from levelapp.evaluator.evaluator import JudgeEvaluator
 
 
 class MainFactory:

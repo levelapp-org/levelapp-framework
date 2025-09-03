@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from levelapp.core.base import BaseProcess
-from levelapp.core.simulator import ConversationSimulator
-from levelapp.utils.loader import DataLoader
-from levelapp.workflow.entities import WorkflowContext
+from levelapp.simulator.simulator import ConversationSimulator
+from levelapp.aspects.loader import DataLoader
+from levelapp.workflow.schemas import WorkflowContext
 
 
 class BaseWorkflow(ABC):

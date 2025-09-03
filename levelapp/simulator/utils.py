@@ -1,5 +1,5 @@
 """
-'simulators/utils.py': Utility functions for handling VLA interactions and requests.
+'simulators/aspects.py': Utility functions for handling VLA interactions and requests.
 """
 import json
 import logging
@@ -14,7 +14,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from levelapp.simulator.schemas import InteractionResults
-from levelapp.utils.monitoring import MonitoringAspect, MetricType
+from levelapp.aspects.monitor import MonitoringAspect, MetricType
 
 
 logger = logging.getLogger("batch-test-cloud-function")
