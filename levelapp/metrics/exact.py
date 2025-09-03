@@ -4,7 +4,7 @@ from typing import Dict, Any
 from rapidfuzz import distance
 
 from levelapp.core.base import BaseMetric
-from levelapp.utils.monitoring import MonitoringAspect, MetricType
+from levelapp.aspects.monitor import MonitoringAspect, MetricType
 
 
 class ExactMatch(BaseMetric):

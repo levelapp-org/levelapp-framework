@@ -3,7 +3,7 @@ from rapidfuzz import utils
 
 from levelapp.clients import ClientRegistry
 from levelapp.metrics import MetricRegistry
-from levelapp.utils.monitoring import FunctionMonitor
+from levelapp.aspects.monitor import FunctionMonitor
 
 
 if __name__ == '__main__':

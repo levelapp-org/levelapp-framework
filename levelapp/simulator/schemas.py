@@ -9,9 +9,9 @@ from uuid import UUID, uuid4
 from datetime import datetime
 
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, HttpUrl, SecretStr, Field, computed_field
+from pydantic import BaseModel, Field, computed_field
 
-from levelapp.core.evaluator import JudgeEvaluationResults
+from levelapp.evaluator.evaluator import JudgeEvaluationResults
 
 
 class InteractionLevel(str, Enum):

@@ -4,7 +4,7 @@ from rapidfuzz import fuzz
 from typing import Dict, Any
 
 from levelapp.core.base import BaseMetric
-from levelapp.utils.monitoring import MonitoringAspect, MetricType
+from levelapp.aspects.monitor import MonitoringAspect, MetricType
 
 
 class FuzzyRatio(BaseMetric):

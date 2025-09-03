@@ -3,9 +3,9 @@ from pydantic import BaseModel
 from dataclasses import dataclass
 from typing import List, Dict, Any
 
-from levelapp.config.interaction_request import EndpointConfig
+from levelapp.config.endpoint import EndpointConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
-from levelapp.utils.loader import DataLoader
+from levelapp.aspects.loader import DataLoader
 
 
 class ExtendedEnum(Enum):

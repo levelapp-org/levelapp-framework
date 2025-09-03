@@ -9,15 +9,15 @@ from datetime import datetime
 from collections import defaultdict
 from typing import Dict, Any, List
 
-from .base import BaseRepository, BaseProcess, BaseEvaluator
-from ..config.interaction_request import EndpointConfig
-from ..simulator.schemas import (
+from levelapp.core.base import BaseRepository, BaseProcess, BaseEvaluator
+from levelapp.config.endpoint import EndpointConfig
+from levelapp.simulator.schemas import (
     InteractionEvaluationResults,
     ScriptsBatch,
     ConversationScript,
     SimulationResults
 )
-from ..simulator.utils import (
+from levelapp.simulator.utils import (
     extract_interaction_details,
     async_interaction_request,
     calculate_average_scores,

@@ -8,10 +8,10 @@ from typing import Dict, List, Any
 from datetime import datetime
 from humanize import precisedelta
 
-from levelapp.utils.monitoring import FunctionMonitor, MetricType, ExecutionMetrics, MonitoringAspect
+from levelapp.aspects.monitor import FunctionMonitor, MetricType, ExecutionMetrics, MonitoringAspect
 from levelapp.workflow import WorkflowType, MainFactory
 from levelapp.workflow.base import BaseWorkflow
-from levelapp.workflow.entities import WorkflowConfig, WorkflowContext
+from levelapp.workflow.schemas import WorkflowConfig, WorkflowContext
 
 logger = logging.getLogger(__name__)
 
