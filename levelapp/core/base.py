@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from typing import List, Dict, Any, Callable, TypeVar, Type
 
+from levelapp.aspects import JSONSanitizer
+
 logger = logging.getLogger(__name__)
 
 Model = TypeVar("Model", bound=BaseModel)
@@ -28,33 +30,125 @@ class BaseProcess(ABC):
 class BaseEvaluator(ABC):
     """Abstract base class for evaluator components."""
     @abstractmethod
-    def evaluate(self, provider: str, generated_text: str, reference_text: str):
+    def evaluate(self, provider: str, user_input: str, generated_text: str, reference_text: str):
         """Evaluate system output to reference output."""
+        raise NotImplementedError
+
+    async def async_evaluate(self, provider: str, user_input: str, generated_text: str, reference_text: str):
+        """Asynchronous evaluation method."""
         raise NotImplementedError
 
 
 class BaseChatClient(ABC):
-    """Abstract base chat client for different LLM providers integration."""
+    """
+    Abstract base class for integrating different LLM provider clients.
+
+    This class defines the common interface and request lifecycle for
+    calling chat-based large language models (LLMs). It enforces
+    provider-specific implementations for:
+      - endpoint path resolution
+      - request headers
+      - request payload
+      - response parsing
+
+    Subclasses (e.g., `OpenAIClient`, `MistralClient`, `AnthropicClient`, `IonosClient`)
+    must override the abstract members to handle provider-specific request/response formats.
+    """
+
     def __init__(self, **kwargs):
+        """
+        Initialize the base chat client.
+
+        Args:
+            **kwargs: Arbitrary keyword arguments. Expected keys include:
+                - base_url (str): The base API URL for the LLM provider.
+        """
         self.base_url = kwargs.get("base_url")
+        self.sanitizer = JSONSanitizer()
 
-    @staticmethod
-    def _endpoint() -> str:
-        return "/predictions"
+    @property
+    @abstractmethod
+    def endpoint_path(self) -> str:
+        """
+        API path (relative to `base_url`) for the provider’s chat endpoint.
 
-    def _build_url(self, endpoint: str) -> str:
-        return f"{self.base_url}/{endpoint.lstrip('/')}"
+        Example:
+            - OpenAI: "/v1/chat/completions"
+            - Mistral: "/chat/completions"
+            - Anthropic: "/v1/messages"
+            - IONOS: "/models/model-id/predictions"
+
+        Returns:
+            str: Provider-specific endpoint path.
+        """
+        raise NotImplementedError
+
+    def _build_endpoint(self) -> str:
+        """
+        Construct the full request endpoint URL.
+
+        Returns:
+            str: Complete endpoint URL (base_url + endpoint_path).
+        """
+        return f"{self.base_url}/{self.endpoint_path.lstrip('/')}"
 
     @abstractmethod
     def _build_headers(self) -> Dict[str, str]:
-        ...
+        """
+        Construct HTTP request headers for the provider.
+
+        This typically includes authentication (e.g., API key or Bearer token),
+        content type, and provider-specific headers.
+
+        Returns:
+            Dict[str, str]: HTTP headers.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def _build_payload(self, message: str) -> Dict[str, Any]:
-        ...
+        """
+        Construct the request body payload for the provider.
+
+        Args:
+            message (str): User message to send to the LLM.
+
+        Returns:
+            Dict[str, Any]: JSON-serializable payload as required by the provider API.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Parse the raw provider response into a normalized format.
+
+        The normalized format should include:
+            - "output": str or structured response content
+            - "metadata": Dict containing tokens, cost, or other provider stats
+
+        Args:
+            response (Dict[str, Any]): Raw JSON response returned by the provider.
+
+        Returns:
+            Dict[str, Any]: Normalized output structure.
+        """
+        raise NotImplementedError
 
     def call(self, message: str) -> Dict[str, Any]:
-        url = self._build_url(self._endpoint())
+        """
+        Make a synchronous call to the provider API.
+
+        Args:
+            message (str): User input message to send.
+
+        Returns:
+            Dict[str, Any]: Provider's raw JSON response.
+
+        Raises:
+            requests.exceptions.RequestException: On any network or HTTP error.
+        """
+        url = self._build_endpoint()
         headers = self._build_headers()
         payload = self._build_payload(message)
 
@@ -77,7 +171,20 @@ class BaseChatClient(ABC):
             raise
 
     async def acall(self, message: str) -> Dict[str, Any]:
-        url = self._build_url(self._endpoint())
+        """
+        Make an asynchronous call to the provider API.
+
+        Args:
+            message (str): User input message to send.
+
+        Returns:
+            Dict[str, Any]: Provider's raw JSON response.
+
+        Raises:
+            httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError:
+                On any network or HTTP error.
+        """
+        url = self._build_endpoint()
         headers = self._build_headers()
         payload = self._build_payload(message)
 

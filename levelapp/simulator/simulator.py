@@ -311,6 +311,7 @@ class ConversationSimulator(BaseProcess):
             )
 
             evaluation_results = await self.evaluate_interaction(
+                user_input=user_message,
                 generated_reply=generated_reply,
                 reference_reply=reference_reply,
                 generated_metadata=generated_metadata,
@@ -346,6 +347,7 @@ class ConversationSimulator(BaseProcess):
 
     async def evaluate_interaction(
         self,
+        user_input: str,
         generated_reply: str,
         reference_reply: str,
         generated_metadata: Dict[str, Any],
@@ -357,6 +359,7 @@ class ConversationSimulator(BaseProcess):
         Evaluate an interaction using OpenAI and Ionos evaluation services.
 
         Args:
+            user_input (str): user input to evaluate.
             generated_reply (str): The generated agent reply.
             reference_reply (str): The reference agent reply.
             generated_metadata (Dict[str, Any]): The generated metadata.
@@ -369,12 +372,14 @@ class ConversationSimulator(BaseProcess):
         """
         openai_eval_task = self.evaluator.async_evaluate(
             provider="openai",
+            user_input=user_input,
             generated_text=generated_reply,
             reference_text=reference_reply,
         )
 
         ionos_eval_task = self.evaluator.async_evaluate(
             provider="ionos",
+            user_input=user_input,
             generated_text=generated_reply,
             reference_text=reference_reply,
         )
@@ -422,7 +427,7 @@ class ConversationSimulator(BaseProcess):
             results.evaluations.get("ionos", "").justification
         )
 
-        collected_scores["openai"].append(results.evaluations.get("openai", "").match_level)
-        collected_scores["ionos"].append(results.evaluations.get("ionos", "").match_level)
+        collected_scores["openai"].append(results.evaluations.get("openai", "").score)
+        collected_scores["ionos"].append(results.evaluations.get("ionos", "").score)
         collected_scores["metadata"].append(0)
         collected_scores["guardrail"].append(0)
