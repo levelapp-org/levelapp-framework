@@ -72,7 +72,6 @@ class BaseWorkflow(ABC):
 class SimulatorWorkflow(BaseWorkflow):
     def __init__(self, context: WorkflowContext) -> None:
         super().__init__(name="ConversationSimulator", context=context)
-        print(f"[SimulatorWorkflow] Context inputs:\n{context.inputs}")
 
     def _setup_process(self, context: WorkflowContext) -> BaseProcess:
         simulator = ConversationSimulator()

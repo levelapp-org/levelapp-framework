@@ -2,16 +2,20 @@
 import os
 import json
 import yaml
-import logging
 
-from pydantic import BaseModel, HttpUrl, SecretStr, Field, computed_field
-from typing import Literal, Dict, Any
 from string import Template
-
 from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
-load_dotenv()
+from enum import Enum
+from typing import Literal, Dict, Any
+from pydantic import BaseModel, HttpUrl, SecretStr, Field, computed_field
+
+from levelapp.aspects import logger
+
+
+class TemplateType(Enum):
+    REQUEST = "request"
+    RESPONSE = "response"
 
 
 class EndpointConfig(BaseModel):
@@ -24,8 +28,8 @@ class EndpointConfig(BaseModel):
         api_key (SecretStr): The API key to use.
         bearer_token (SecretStr): The Bearer token to use.
         model_id (str): The model to use (if applicable).
-        default_payload_template (Dict[str, Any]): The payload template to use.
-        generated_payload_template (Dict[str, Any]): The generated payload template from a provided file.
+        default_request_payload_template (Dict[str, Any]): The payload template to use.
+        generated_request_payload_template (Dict[str, Any]): The generated payload template from a provided file.
         variables (Dict[str, Any]): The variables to populate the payload template.
 
     Note:
@@ -39,8 +43,12 @@ class EndpointConfig(BaseModel):
         - generated_payload_template (Dict[str, Any]): The generated payload template from a provided file.
         - variables (Dict[str, Any]): The variables to populate the payload template.
 
-        Or manually configure the model instance by assigning the proper values to the model fields.
+        Or manually configure the model instance by assigning the proper values to the model fields.\n
+        You can also provide the path in the .env file for the payload template (ENDPOINT_PAYLOAD_PATH)
+        and the response template (ENDPOINT_RESPONSE_PATH) separately. The files can be either YAML or JSON only.
     """
+    load_dotenv()
+
     # TODO-0: Adjust the code to support both GET and POST requests.
     # Required
     method: Literal["POST", "GET"] = Field(default="POST")
@@ -53,10 +61,10 @@ class EndpointConfig(BaseModel):
     model_id: str | None = Field(default='')
 
     # Data
-    default_payload_template: Dict[str, Any] = Field(default_factory=dict)
-    generated_payload_template: Dict[str, Any] = Field(default_factory=dict)
-    default_response_template: Dict[str, Any] = Field(default_factory=dict)
-    generated_response_template: Dict[str, Any] = Field(default_factory=dict)
+    default_request_payload_template: Dict[str, Any] = Field(default_factory=dict)
+    generated_request_payload_template: Dict[str, Any] = Field(default_factory=dict)
+    default_response_payload_template: Dict[str, Any] = Field(default_factory=dict)
+    generated_response_payload_template: Dict[str, Any] = Field(default_factory=dict)
 
     # Variables
     variables: Dict[str, Any] = Field(default_factory=dict)
@@ -80,16 +88,46 @@ class EndpointConfig(BaseModel):
 
     @computed_field
     @property
-    def payload(self) -> Dict[str, Any]:
+    def request_payload(self) -> Dict[str, Any]:
         """Return fully prepared payload depending on template or full payload."""
+        # First, load the request payload template (either from YAML config file or from specific template)
         if not self.variables:
-            return self.default_payload_template
+            return self.default_request_payload_template
 
-        if not self.default_payload_template:
-            self.load_template()
-            return self._replace_placeholders(self.generated_payload_template, self.variables)
+        if not self.default_request_payload_template:
+            self.load_template(template_type=TemplateType.REQUEST)
+            base_template = self.generated_request_payload_template
+        else:
+            base_template = self.default_request_payload_template
 
-        return self._replace_placeholders(self.default_payload_template, self.variables)
+        # Second, replace the placeholders with the variables
+        payload = self._replace_placeholders(obj=base_template, variables=self.variables)
+
+        # Third, merge the "request_payload" if present in variables
+        additional_payload_data = self.variables.get("request_payload", {})
+        if additional_payload_data:
+            payload.update(additional_payload_data)
+
+        self.variables.clear()
+
+        return payload
+
+    @computed_field
+    @property
+    def response_payload(self) -> Dict[str, Any]:
+        if not self.variables:
+            return self.default_response_payload_template
+
+        if not self.default_response_payload_template:
+            self.load_template(template_type=TemplateType.RESPONSE)
+            base_template = self.generated_response_payload_template
+        else:
+            base_template = self.default_response_payload_template
+
+        response_payload = self._replace_placeholders(obj=base_template, variables=self.variables)
+        self.variables.clear()
+
+        return response_payload
 
     @staticmethod
     def _replace_placeholders(obj: Any, variables: Dict[str, Any]) -> Dict[str, Any]:
@@ -112,10 +150,15 @@ class EndpointConfig(BaseModel):
         return _replace(obj)
 
     # TODO-0: Use 'Path' for path configuration.
-    def load_template(self, path: str | None = None) -> Dict[str, Any]:
+    def load_template(
+            self,
+            template_type: TemplateType = TemplateType.REQUEST,
+            path: str | None = None
+    ) -> Dict[str, Any]:
         try:
             if not path:
-                path = os.getenv('PAYLOAD_PATH', '')
+                env_var = "ENDPOINT_PAYLOAD_PATH" if template_type == TemplateType.REQUEST else "ENDPOINT_RESPONSE_PATH"
+                path = os.getenv(env_var, '')
 
             if not os.path.exists(path):
                 raise FileNotFoundError(f"The provide payload template file path '{path}' does not exist.")
@@ -130,7 +173,7 @@ class EndpointConfig(BaseModel):
                 else:
                     raise ValueError("[EndpointConfig] Unsupported file format.")
 
-                self.generated_payload_template = data
+                self.generated_request_payload_template = data
                 # TODO-1: Remove the return statement if not required.
                 return data
 

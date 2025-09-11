@@ -39,6 +39,7 @@ class JudgeEvaluationResults(BaseModel):
     justification: str = Field(..., description="Short explanation of the evaluation result")
     evidence: Evidence = Field(default_factory=Evidence, description="Detailed evidence for the evaluation")
     raw_response: Dict[str, Any] = Field(..., description="Full unprocessed API response")
+    metadata: Dict[str, Any] = Field(..., description="Metadata about the evaluation result")
 
     @classmethod
     def from_parsed(cls, provider: str, parsed: Dict[str, Any], raw: Dict[str, Any]) -> "JudgeEvaluationResults":
@@ -53,13 +54,16 @@ class JudgeEvaluationResults(BaseModel):
         Returns:
             JudgeEvaluationResults: The constructed evaluation result instance.
         """
+        content = parsed.get("output", {})
+        metadata = parsed.get("metadata", {})
         return cls(
             provider=provider,
-            score=parsed.get("score", 0),
-            label=parsed.get("label", "N/A"),
-            justification=parsed.get("justification", "N/A"),
-            evidence=Evidence(**parsed.get("evidence", {})),
-            raw_response=raw
+            score=content.get("score", 0),
+            label=content.get("label", "N/A"),
+            justification=content.get("justification", "N/A"),
+            evidence=Evidence(**content.get("evidence", {})),
+            raw_response=raw,
+            metadata=metadata,
         )
 
 
@@ -113,7 +117,8 @@ class JudgeEvaluator(BaseEvaluator):
                 label="N/A",
                 justification="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
-                raw_response={}
+                raw_response={},
+                metadata={}
             )
 
     @MonitoringAspect.monitor(name="judge_evaluation", category=MetricType.API_CALL)
@@ -152,5 +157,6 @@ class JudgeEvaluator(BaseEvaluator):
                 label="N/A",
                 justification="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
-                raw_response={}
+                raw_response={},
+                metadata={}
             )

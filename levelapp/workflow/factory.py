@@ -1,5 +1,5 @@
 from typing import Callable
-from levelapp.workflow.schemas import WorkflowType, RepositoryType, EvaluatorType, WorkflowConfig
+from levelapp.workflow.schemas import WorkflowType, RepositoryType, EvaluatorType, WorkflowConfig, WorkflowContext
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.base import BaseWorkflow
 
