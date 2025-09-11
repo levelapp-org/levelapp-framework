@@ -40,6 +40,7 @@ class Interaction(BaseModel):
     reference_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Expected metadata")
     generated_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Extracted metadata")
     guardrail_flag: bool = Field(default=False, description="Flag for guardrail signaling")
+    request_payload: Dict[str, Any] = Field(default_factory=dict, description="Additional request payload")
 
 
 class ConversationScript(BaseModel):
@@ -60,7 +61,8 @@ class InteractionResults(BaseModel):
     """Represents metadata extracted from a VLA interaction."""
     generated_reply: str | None = "No response"
     generated_metadata: Dict[str, Any] | None = {}
-    guardrail_details: Dict[str, Any] | None = {}
+    # TODO-0: Change the 'guardrail_flag' type to 'bool'.
+    guardrail_flag: Any | None = False
     # TODO-1: Remove 'interaction_type'?
     interaction_type: str | None = ""
 

@@ -24,13 +24,12 @@ AGENT (model reply):
 \"\"\"{generated_text}\"\"\"
 
 Return ONLY a single JSON object on one line with exactly these keys:
-{{
-  "score": <0|1|2|3>,
-  "label": "<Poor|Moderate|Good|Excellent>",
-  "justification": "<1-2 concise sentences>",
-  "evidence": {{
-    "covered_points": ["<short phrase>", "..."],   // <=3 items
-    "missing_or_wrong": ["<short phrase>", "..."]  // <=3 items
-  }}
-}}
+- "score": <0|1|2|3>,
+- "label": "<Poor|Moderate|Good|Excellent>",
+- "justification": "<1-2 concise sentences>",
+- "evidence":
+    - "covered_points": ["<short phrase>", "..."],   // <=3 items
+    - "missing_or_wrong": ["<short phrase>", "..."]  // <=3 items
+    
+Do NOT include any additional text, explanations, or formatting (e.g., "JSON object:", ```json or ```, or markdown).
 """

@@ -2,7 +2,6 @@
 'simulators/aspects.py': Utility functions for handling VLA interactions and requests.
 """
 import json
-import logging
 
 import httpx
 import arrow
@@ -14,10 +13,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from levelapp.simulator.schemas import InteractionResults
-from levelapp.aspects.monitor import MonitoringAspect, MetricType
-
-
-logger = logging.getLogger("batch-test-cloud-function")
+from levelapp.aspects import MonitoringAspect, MetricType, logger
 
 
 class UUIDEncoder(json.JSONEncoder):
@@ -28,48 +24,39 @@ class UUIDEncoder(json.JSONEncoder):
 
 
 def extract_interaction_details(
-        response: str,
+        response: str | Dict[str, Any],
+        template: Dict[str, Any],
 ) -> InteractionResults:
     """
     Extract interaction details from a VLA response.
 
     Args:
         response (str): The response text from the VLA.
+        template (Dict[str, Any]): The response schema/template.
 
     Returns:
         InteractionResults: The extracted interaction details.
     """
     try:
-        payload = json.loads(response)
+        response_dict = response if isinstance(response, dict) else json.loads(response)
 
-        if not isinstance(payload, dict):
-            raise ValueError("[extract_interaction_details] response is not of type dict]")
+        if not isinstance(response_dict, dict):
+            raise ValueError("Response is not a valid dictionary")
 
-        # TODO-0: Add a template-based data loading for the response.
-        return InteractionResults(
-            generated_reply=payload.get("generated_reply", ""),
-            generated_metadata=payload.get("generated_metadata", {}),
-            guardrail_details=payload.get("guardrail_details", {}),
-            interaction_type=payload.get("interaction_type", ""),
-        )
+        required_keys = {value.strip("${}") for value in template.values()}
+        if not required_keys.issubset(response_dict.keys()):
+            missing_keys = required_keys - response_dict.keys()
+            logger.warning(f"[extract_interaction_details] Missing data: {missing_keys}]")
 
-    except json.JSONDecodeError as err:
-        logger.error(f"[extract_interaction_details] JSON decoding error: {err}")
-        return InteractionResults(
-            generated_reply="VLA request failed.",
-            generated_metadata={},
-            guardrail_details={},
-            interaction_type="",
-        )
+        return InteractionResults.model_validate(response_dict)
 
-    except ValidationError as err:
-        logger.error(f"[extract_interaction_details] Pydantic validation error: {err}")
-        return InteractionResults(
-            generated_reply="VLA request failed.",
-            generated_metadata={},
-            guardrail_details={},
-            interaction_type="",
-        )
+    except json.JSONDecodeError as e:
+        logger.error(f"[extract_interaction_details] Failed to extract details:\n{e}")
+        return InteractionResults()
+
+    except ValidationError as e:
+        logger.exception(f"[extract_interaction_details] Failed to create an InteractionResults instance:\n{e}")
+        return InteractionResults()
 
 
 @MonitoringAspect.monitor(name="interaction_request", category=MetricType.API_CALL)
@@ -208,3 +195,19 @@ def summarize_verdicts(verdicts: List[str], judge: str, max_bullets: int = 5) ->
     except Exception as e:
         logger.error(f"[summarize_justifications] Error during summarization: {str(e)}", exc_info=True)
         return []
+
+
+if __name__ == '__main__':
+    response_data = {
+        "generated_reply": "agent_reply",
+        "generated_metadata": {"a": 1, "b": 2},
+        "guardrail": False
+    }
+    template_ = {
+        "agent_reply": "${generated_reply}",
+        "guardrail_flag": "${guardrail}",
+        "generated_metadata": "${generated_metadata}"
+    }
+
+    extracted_data = extract_interaction_details(response=response_data, template=template_)
+    print(extracted_data.model_dump())

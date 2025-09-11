@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 from levelapp.config.endpoint import EndpointConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
-from levelapp.aspects.loader import DataLoader
+from levelapp.aspects import DataLoader
 
 
 class ExtendedEnum(Enum):
@@ -73,7 +73,6 @@ class WorkflowConfig:
         evaluator = EvaluatorType(model_config.evaluator)
         evaluation_params = model_config.evaluation_params.model_dump()
         reference_data_path = getattr(model_config.reference_data, "path", None)
-        print(f"[WorkflowConfig.load] evaluation params (type:{type(evaluation_params)}):\n{evaluation_params}")
         endpoint_config = EndpointConfig.model_validate(model_config.endpoint_configuration.model_dump())
 
         return cls(

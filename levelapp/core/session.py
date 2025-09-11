@@ -75,7 +75,6 @@ class StepContext:
         self._func_gen = None
 
     def __enter__(self):
-        logger.info(f"[StepContext] Starting step: {self.step_name}")
         with self.session.lock:
             self.step_meta = StepMetadata(
                 step_name=self.step_name,
@@ -114,8 +113,6 @@ class StepContext:
             if self.step_meta.duration:
                 self.session.monitor.update_procedure_duration(name=self.full_step_name, value=self.step_meta.duration)
                 self.session.session_metadata.total_duration += self.step_meta.duration
-
-        logger.info(f"[StepContext] Completed step: {self.step_name} in {self.step_meta.duration:.2f}s")
 
         return False
 
