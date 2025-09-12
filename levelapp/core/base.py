@@ -1,20 +1,17 @@
 """levelapp/core/base.py"""
-import asyncio
 import datetime
 import json
 
 import httpx
 import requests
-import logging
 
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
 from typing import List, Dict, Any, Callable, TypeVar, Type
 
-from levelapp.aspects import JSONSanitizer
+from levelapp.aspects import JSONSanitizer, logger
 
-logger = logging.getLogger(__name__)
 
 Model = TypeVar("Model", bound=BaseModel)
 Context = TypeVar("Context")
@@ -30,11 +27,12 @@ class BaseProcess(ABC):
 class BaseEvaluator(ABC):
     """Abstract base class for evaluator components."""
     @abstractmethod
-    def evaluate(self, provider: str, user_input: str, generated_text: str, reference_text: str):
+    def evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
         """Evaluate system output to reference output."""
         raise NotImplementedError
 
-    async def async_evaluate(self, provider: str, user_input: str, generated_text: str, reference_text: str):
+    @abstractmethod
+    async def async_evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
         """Asynchronous evaluation method."""
         raise NotImplementedError
 

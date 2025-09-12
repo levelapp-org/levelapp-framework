@@ -376,15 +376,15 @@ class ConversationSimulator(BaseProcess):
         openai_eval_task = self.evaluator.async_evaluate(
             provider="openai",
             user_input=user_input,
-            generated_text=generated_reply,
-            reference_text=reference_reply,
+            generated_data=generated_reply,
+            reference_data=reference_reply,
         )
 
         ionos_eval_task = self.evaluator.async_evaluate(
             provider="ionos",
             user_input=user_input,
-            generated_text=generated_reply,
-            reference_text=reference_reply,
+            generated_data=generated_reply,
+            reference_data=reference_reply,
         )
 
         openai_judge_evaluation, ionos_judge_evaluation = await asyncio.gather(
