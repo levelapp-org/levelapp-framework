@@ -27,10 +27,18 @@ class Scorer(Protocol):
 class MetricsManager:
     """Manages scorer registration, score computation, metric configuration."""
 
-    def __init__(self, metrics_mapping: Optional[Dict[str, MetricConfig]] = None):
+    def __init__(self, metrics_mapping: Dict[str, MetricConfig] | None = None):
         self._scorers: Dict[str, Callable] = {}
-        self.metrics_mapping = metrics_mapping or {}
+        self._metrics_mapping = metrics_mapping or {}
         self._initialize_scorers()
+
+    @property
+    def metrics_mapping(self) -> Dict[str, MetricConfig]:
+        return self._metrics_mapping
+
+    @metrics_mapping.setter
+    def metrics_mapping(self, value: Dict[str, MetricConfig]):
+        self._metrics_mapping = value
 
     def _initialize_scorers(self) -> None:
         """Register existing scorers to prevent residual state."""
@@ -69,11 +77,8 @@ class MetricsManager:
         Raises:
             ValueError: if the scorer is not a callable.
         """
-        if not callable(scorer):
-            raise ValueError(f"[register_scorer] Scorer for '{name}' is not callable: {type(scorer)}")
-
         self._scorers[name] = scorer
-        logging.info(f"[register_scorer] Registered scorer: {name}")
+        logger.info(f"[MetricsManager] Registered scorer: {name}")
 
     def get_scorer(self, name: str) -> Callable:
         """
@@ -88,14 +93,13 @@ class MetricsManager:
         Raises:
             ValueError: if the passed name is not registered.
         """
-        # TODO: Add a default value for fallback.
         try:
             scorer = self._scorers.get(name)
-            logging.info(f"[get_scorer] Retrieved scorer: {name}")
+            logger.info(f"[get_scorer] Retrieved scorer: {name}")
             return scorer
 
         except KeyError:
-            raise ValueError(f"[get_scorer] '{name}' is not registered")
+            raise ValueError(f"[MetricsManager] '{name}' is not registered")
 
     def get_metrics_config(self, field: str) -> MetricConfig:
         """
@@ -111,9 +115,9 @@ class MetricsManager:
             field_name=field,
             entity_metric=EntityMetric.LEV_NORM,
             set_metric=SetMetric.ACCURACY,
-            threshold=0.9
+            threshold=1
         )
-        return self.metrics_mapping.get(field, default_config)
+        return self._metrics_mapping.get(field, default_config)
 
     def compute_entity_scores(
             self,
@@ -145,8 +149,8 @@ class MetricsManager:
             ]
 
         if scorer not in EntityMetric.list():
-            logging.warning(f"[compute_entity_scores] Scorer name <{scorer}> is not supported.]")
-            raise ValueError(f"[compute_entity_scores] Scorer <{scorer}> is not registered.")
+            logger.warning(f"[MetricsManager] Scorer name <{scorer}> is not supported.]")
+            raise ValueError(f"[MetricsManager] Scorer <{scorer}> is not registered.")
 
         max_len = max(len(reference_seq), len(extracted_seq))
         reference_padded = reference_seq + [""] * (max_len - len(reference_seq))
@@ -235,11 +239,11 @@ class MetricsManager:
             )
 
         tp = matches
-        fp = len(ref) - matches
-        fn = len(ext) - matches
+        fp = len(ref) - int(matches)
+        fn = len(ext) - int(matches)
 
         if scorer == SetMetric.ACCURACY:
-            accuracy = tp / len(entity_scores) if len(entity_scores) > 0 else 0.0
+            accuracy = (tp / len(entity_scores)) if len(entity_scores) > 0 else 0.0
             return ComparisonResults(
                 ref=ref,
                 ext=ext,
@@ -265,5 +269,3 @@ class MetricsManager:
                 s_metric=scorer.value,
                 s_score=f1
             )
-
-        raise ValueError(f"[compute_metrics] Unsupported metric: {scorer}")

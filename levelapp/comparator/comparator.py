@@ -1,14 +1,13 @@
 """'comparator/service.py':"""
-from collections import defaultdict
-
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, Dict, List, Tuple, Literal
 
 from pydantic import BaseModel
 
+from levelapp.comparator.extractor import DataExtractor
 from levelapp.core.base import BaseProcess
 from levelapp.comparator.scorer import MetricsManager, ComparisonResults
-from levelapp.comparator.schemas import EntityMetric, SetMetric
+from levelapp.comparator.schemas import EntityMetric, SetMetric, MetricConfig
 from levelapp.comparator.utils import format_evaluation_results
 
 
@@ -18,7 +17,7 @@ class MetadataComparator(BaseProcess):
     def __init__(
             self,
             reference: BaseModel | None = None,
-            extracted: BaseModel | None = None,
+            generated: BaseModel | None = None,
             metrics_manager: MetricsManager | None = None,
     ):
         """
@@ -26,19 +25,42 @@ class MetadataComparator(BaseProcess):
 
         Args:
             reference (BaseModel): Reference BaseModel
-            extracted (BaseModel): Extracted BaseModel
+            generated (BaseModel): Extracted BaseModel
             metrics_manager (MetricsManager): MetricsManager
         """
-        self.reference = reference
-        self.extracted = extracted
-        self.metrics_manager = metrics_manager
+        self.extractor = DataExtractor()
+
+        self._reference = reference
+        self._generated = generated
+        self._metrics_manager = metrics_manager
+
         self._evaluation_data: List[
             Tuple[str, list[str], list[str], Any, Any, Any, Any, float]
         ] = []
 
-    def compare(self):
-        # TODO-0: Implement the entry point logic here.
-        pass
+    @property
+    def reference_data(self) -> BaseModel:
+        return self._reference
+
+    @property
+    def generated_data(self) -> BaseModel:
+        return self._generated
+
+    @property
+    def metrics_manager(self) -> MetricsManager:
+        return self._metrics_manager
+
+    @reference_data.setter
+    def reference_data(self, value: BaseModel):
+        self._reference = value
+
+    @generated_data.setter
+    def generated_data(self, value: BaseModel):
+        self._generated = value
+
+    @metrics_manager.setter
+    def metrics_manager(self, value: MetricsManager):
+        self._metrics_manager = value
 
     def _get_score(self, field: str) -> Tuple[EntityMetric, SetMetric, float]:
         """
@@ -50,7 +72,11 @@ class MetadataComparator(BaseProcess):
         Returns:
             A tuple containing the scoring metric and its threshold.
         """
-        config = self.metrics_manager.get_metrics_config(field=field)
+        if self._metrics_manager:
+            config = self._metrics_manager.get_metrics_config(field=field)
+        else:
+            config = MetricConfig()
+
         return config.entity_metric, config.set_metric, config.threshold
 
     def _format_results(
@@ -68,103 +94,7 @@ class MetadataComparator(BaseProcess):
         """
         formatted_results = format_evaluation_results(self._evaluation_data, output_type=output_type)
 
-        return {i: row for i, row in enumerate(formatted_results)}
-
-    def _handle_model(
-        self, model: BaseModel, prefix: str, result: Dict[str, List[str]]
-    ) -> None:
-        """
-        Extract values from a Pydantic model recursively.
-
-        Args:
-            model: Pydantic BaseModel instance.
-            prefix: Current field path.
-            result: Dictionary to store field paths and value lists.
-        """
-        for field_name, field_info in type(model).model_fields.items():
-            field_value = getattr(model, field_name)
-            new_prefix = f"{prefix}.{field_name}" if prefix else field_name
-            self._extract_field_values(
-                value=field_value, prefix=new_prefix, result=result
-            )
-
-    def _handle_sequence(
-        self,
-        sequence: Sequence,
-        prefix: str,
-        result: Dict[str, List[str]],
-        indexed: bool = False,
-    ) -> None:
-        """
-        Extract values from a sequence (list or tuple) recursively.
-
-        Args:
-            sequence: List or tuple of values.
-            prefix: Current field path.
-            result: Dictionary to store field paths and value lists.
-            indexed: Switch parameter to select the extraction approach.
-        """
-        if not sequence:
-            result[prefix] = []
-
-        if indexed:
-            for i, item in enumerate(sequence):
-                new_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
-                self._extract_field_values(value=item, prefix=new_prefix, result=result)
-        else:
-            for i, item in enumerate(sequence):
-                self._extract_field_values(
-                    value=item, prefix=prefix, result=result, indexed=indexed
-                )
-
-    def _extract_field_values(
-        self,
-        value: Any,
-        prefix: str,
-        result: Dict[str, List[str]],
-        indexed: bool = False,
-    ) -> None:
-        """
-        Recursively extract values from a field, storing them in result with field path as key.
-
-        Args:
-            value: The value to extract (BaseModel, dict, list, or primitive).
-            prefix: The current field path (e.g., 'documents.tribunal_members').
-            result: Dictionary to store field paths and their value lists.
-            indexed: Switch parameter to select the extraction approach.
-        """
-        if isinstance(value, BaseModel):
-            self._handle_model(model=value, prefix=prefix, result=result)
-
-        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            self._handle_sequence(
-                sequence=value, prefix=prefix, result=result, indexed=indexed
-            )
-
-        else:
-            result[prefix].append(value)
-
-    def deep_extract(
-        self, model: BaseModel, indexed: bool = False
-    ) -> Dict[str, List[str]]:
-        """
-        Extracts data in a recursive way from pydantic model.
-
-        Args:
-            model: An instance of a BaseModel.
-            indexed: Switch parameter to select the extraction approach.
-
-        Returns:
-            A dictionary where keys are attribute names and values are lists of string values.
-        """
-        result: Dict[str, List[str]] = defaultdict(list)
-        for field_name, field_info in type(model).model_fields.items():
-            field_value = getattr(model, field_name)
-            self._extract_field_values(
-                value=field_value, prefix=field_name, result=result, indexed=indexed
-            )
-
-        return result
+        return dict(enumerate(formatted_results))
 
     def evaluate(
             self,
@@ -190,14 +120,14 @@ class MetadataComparator(BaseProcess):
         if not (reference_list or extracted_list):
             return ComparisonResults("", "", entity_metric.value, None, set_metric.value, None)
 
-        scores = self.metrics_manager.compute_entity_scores(
+        scores = self._metrics_manager.compute_entity_scores(
             reference_seq=reference_list,
             extracted_seq=extracted_list,
             scorer=entity_metric,
             pairwise=False
         )
 
-        return self.metrics_manager.compute_set_scores(
+        return self._metrics_manager.compute_set_scores(
             data=scores,
             scorer=set_metric,
             threshold=threshold,
@@ -284,8 +214,8 @@ class MetadataComparator(BaseProcess):
         """
         self._evaluation_data.clear()
 
-        ref_data = self.deep_extract(model=self.reference, indexed=indexed_mode)
-        ext_data = self.deep_extract(model=self.extracted, indexed=indexed_mode)
+        ref_data = self.extractor.deep_extract(model=self.reference_data, indexed=indexed_mode)
+        ext_data = self.extractor.deep_extract(model=self.generated_data, indexed=indexed_mode)
 
         results: Dict[str, Dict[str, float]] = {}
 

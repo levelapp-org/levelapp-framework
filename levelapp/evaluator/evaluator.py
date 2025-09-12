@@ -14,6 +14,7 @@ from tenacity import (
 )
 
 from levelapp.clients import ClientRegistry
+from levelapp.comparator import MetricsManager
 from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE
 from levelapp.core.base import BaseEvaluator, BaseChatClient
 from levelapp.aspects import MonitoringAspect, MetricType, logger
@@ -93,13 +94,13 @@ class JudgeEvaluator(BaseEvaluator):
             self,
             provider: str,
             user_input: str,
-            generated_text: str,
-            reference_text: str
+            generated_data: str,
+            reference_data: str
     ) -> JudgeEvaluationResults | None:
         prompt = self._build_prompt(
             user_input=user_input,
-            generated_text=generated_text,
-            reference_text=reference_text
+            generated_text=generated_data,
+            reference_text=reference_data
         )
         client = ClientRegistry.get(provider=provider)
 
@@ -126,13 +127,13 @@ class JudgeEvaluator(BaseEvaluator):
             self,
             provider: str,
             user_input: str,
-            generated_text: str,
-            reference_text: str
+            generated_data: str,
+            reference_data: str
     ) -> JudgeEvaluationResults | None:
         prompt = self._build_prompt(
             user_input=user_input,
-            generated_text=generated_text,
-            reference_text=reference_text
+            generated_text=generated_data,
+            reference_text=reference_data
         )
         client = ClientRegistry.get(provider=provider)
 
@@ -145,7 +146,7 @@ class JudgeEvaluator(BaseEvaluator):
             ):
                 with attempt:
                     response = await client.acall(message=prompt)
-                    logger.info(f"[{provider}] Async evaluation: (response type:{type(response)})\n{response}\n{'---' * 10}")
+                    logger.info(f"[{provider}] Async evaluation:\n{response}\n{'---' * 10}")
                     parsed = client.parse_response(response=response)
                     return JudgeEvaluationResults.from_parsed(provider=provider, parsed=parsed, raw=response)
 
@@ -160,3 +161,17 @@ class JudgeEvaluator(BaseEvaluator):
                 raw_response={},
                 metadata={}
             )
+
+
+class MetadataEvaluator(BaseEvaluator):
+    def __init__(self):
+        self.metrics_manager = MetricsManager()
+
+    def evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
+        pass
+
+    async def async_evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
+        """Not implemented yet."""
+        pass
+
+
