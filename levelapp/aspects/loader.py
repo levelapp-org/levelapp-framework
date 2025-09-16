@@ -101,6 +101,7 @@ class DataLoader:
         self._name = self.__class__.__name__
         load_dotenv()
 
+    # TODO-0: Change the method name please T-T.
     @staticmethod
     def load_configuration(path: str | None = None):
         try:

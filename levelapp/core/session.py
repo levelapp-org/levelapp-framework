@@ -160,7 +160,7 @@ class EvaluationSession:
             context = WorkflowContext(
                 config=self.workflow_config,
                 repository=MainFactory.create_repository(self.workflow_config),
-                evaluator=MainFactory.create_evaluator(self.workflow_config),
+                evaluators=MainFactory.create_evaluator(self.workflow_config),
                 endpoint_config=self.workflow_config.endpoint_config,
                 inputs=self.workflow_config.inputs
             )

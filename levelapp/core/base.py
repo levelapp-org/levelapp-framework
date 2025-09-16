@@ -27,12 +27,22 @@ class BaseProcess(ABC):
 class BaseEvaluator(ABC):
     """Abstract base class for evaluator components."""
     @abstractmethod
-    def evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
+    def evaluate(
+            self,
+            generated_data: str | Dict[str, Any],
+            reference_data: str | Dict[str, Any],
+            **kwargs
+    ):
         """Evaluate system output to reference output."""
         raise NotImplementedError
 
     @abstractmethod
-    async def async_evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
+    async def async_evaluate(
+            self,
+            generated_data: str | Dict[str, Any],
+            reference_data: str | Dict[str, Any],
+            **kwargs
+    ):
         """Asynchronous evaluation method."""
         raise NotImplementedError
 
