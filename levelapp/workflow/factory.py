@@ -1,10 +1,10 @@
-from typing import Callable
+from typing import Callable, Dict
 from levelapp.workflow.schemas import WorkflowType, RepositoryType, EvaluatorType, WorkflowConfig, WorkflowContext
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.base import BaseWorkflow
 
 from levelapp.repository.firestore import FirestoreRepository
-from levelapp.evaluator.evaluator import JudgeEvaluator
+from levelapp.evaluator.evaluator import JudgeEvaluator, MetadataEvaluator
 
 
 class MainFactory:
@@ -16,6 +16,8 @@ class MainFactory:
 
     _evaluator_map: dict[EvaluatorType, Callable[[WorkflowConfig], BaseEvaluator]] = {
         EvaluatorType.JUDGE: lambda cfg: JudgeEvaluator(),
+        EvaluatorType.REFERENCE: lambda cfg: MetadataEvaluator(),
+        # Next is the RAG evaluator..
     }
 
     _workflow_map: dict[WorkflowType, Callable[["WorkflowContext"], BaseWorkflow]] = {}
@@ -28,11 +30,14 @@ class MainFactory:
         return fn(config)
 
     @classmethod
-    def create_evaluator(cls, config: WorkflowConfig) -> BaseEvaluator:
-        fn = cls._evaluator_map.get(config.evaluator)
-        if not fn:
-            raise NotImplementedError(f"Evaluator {config.evaluator} not implemented")
-        return fn(config)
+    def create_evaluator(cls, config: WorkflowConfig) -> Dict[EvaluatorType, BaseEvaluator]:
+        evaluators: dict[EvaluatorType, BaseEvaluator] = {}
+        for ev in config.evaluators:
+            fn = cls._evaluator_map.get(ev)
+            if not fn:
+                raise NotImplementedError(f"Evaluator {config.evaluators} not implemented")
+            evaluators[ev] = fn(config)
+        return evaluators
 
     @classmethod
     def create_workflow(cls, wf_type: WorkflowType, context: "WorkflowContext") -> BaseWorkflow:

@@ -1,5 +1,6 @@
 """levelapp/core/evaluator.py"""
 from functools import lru_cache
+from importlib.metadata import metadata
 from typing import List, Dict, Any
 from collections import defaultdict
 from pydantic import BaseModel, Field
@@ -14,10 +15,10 @@ from tenacity import (
 )
 
 from levelapp.clients import ClientRegistry
-from levelapp.comparator import MetricsManager
+from levelapp.comparator import MetricsManager, MetadataComparator
 from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE
 from levelapp.core.base import BaseEvaluator, BaseChatClient
-from levelapp.aspects import MonitoringAspect, MetricType, logger
+from levelapp.aspects import MonitoringAspect, MetricType, logger, DataLoader
 
 
 class Evidence(BaseModel):
@@ -92,10 +93,10 @@ class JudgeEvaluator(BaseEvaluator):
     )
     def evaluate(
             self,
-            provider: str,
-            user_input: str,
             generated_data: str,
-            reference_data: str
+            reference_data: str,
+            user_input: str,
+            provider: str,
     ) -> JudgeEvaluationResults | None:
         prompt = self._build_prompt(
             user_input=user_input,
@@ -125,10 +126,10 @@ class JudgeEvaluator(BaseEvaluator):
     @MonitoringAspect.monitor(name="judge_evaluation", category=MetricType.API_CALL)
     async def async_evaluate(
             self,
-            provider: str,
-            user_input: str,
             generated_data: str,
-            reference_data: str
+            reference_data: str,
+            user_input: str,
+            provider: str,
     ) -> JudgeEvaluationResults | None:
         prompt = self._build_prompt(
             user_input=user_input,
@@ -163,15 +164,92 @@ class JudgeEvaluator(BaseEvaluator):
             )
 
 
+# TODO-0: Needs more refinement (to revisit later).
 class MetadataEvaluator(BaseEvaluator):
     def __init__(self):
+        self.data_loader = DataLoader()
+        self.comparator = MetadataComparator()
         self.metrics_manager = MetricsManager()
 
-    def evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
-        pass
+    def evaluate(
+            self,
+            generated_data: str | Dict[str, Any],
+            reference_data: str | Dict[str, Any],
+            metrics_mapping: Any | None = None,
+    ) -> Dict[str, float]:
+        gen_data = self.data_loader.load_data(data=generated_data, model_name="GeneratedMetadata")
+        ref_data = self.data_loader.load_data(data=reference_data, model_name="ReferenceMetadata")
+
+        if metrics_mapping:
+            self.comparator.metrics_manager = metrics_mapping
+
+        self.comparator.metrics_manager = self.metrics_manager
+        self.comparator.generated_data = gen_data
+        self.comparator.reference_data = ref_data
+
+        output = self.comparator.run(indexed_mode=False)
+        logger.info(f"Comparison results:\n{output}\n---")
+        results: Dict[str, float] = {}
+
+        for k, v in output.items():
+            field = v.get("field_name", "N/A")
+            score = v.get("set_scores", -1)
+            results[field] = int(score[0]) if isinstance(score, list) else int(score)
+
+        return results
 
     async def async_evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
         """Not implemented yet."""
         pass
 
 
+if __name__ == '__main__':
+
+    # class Pirate(BaseModel):
+    #     name: str
+    #     role: str
+    #
+    # class Crew(BaseModel):
+    #     name: str = "Straw Hats"
+    #     crew: List[Pirate] = [Pirate(name="Monkey D. Luffy", role="Captain")]
+    #     details: Dict[str, Any] = {"Ship": "SunnyGo", "Reputation": "Good"}
+    #
+    #
+    # straw_hats = Crew(
+    #     name="Straw Hat Pirates",
+    #     crew=[
+    #         Pirate(name="Monkey D. Luffy", role="Captain"),
+    #         Pirate(name="Roronoa Zoro", role="Swordsman"),
+    #         Pirate(name="Nami", role="Navigator"),
+    #         Pirate(name="Usopp", role="Sniper"),
+    #         Pirate(name="Sanji", role="Cook")
+    #     ],
+    #     details={"ship": "Thousand Sunny", "reputation": "Legendary", "bounty": "3,161,000,100+ Berries"}
+    # )
+    #
+    # fake_straw_hats = Crew(
+    #     name="Straw Hat Pirates",
+    #     crew=[
+    #         Pirate(name="Demalo Black", role="Captain"),
+    #         Pirate(name="Manjaro", role="Swordsman"),
+    #         Pirate(name="Chocolat", role="Navigator"),
+    #         Pirate(name="Mounblutain", role="Sniper"),
+    #         Pirate(name="Drip", role="Cook")
+    #     ],
+    #     details={"ship": "", "reputation": "Fake", "bounty": "0 Berries"}
+    # )
+    #
+    # metadata_evaluator = MetadataEvaluator()
+    # results_ = metadata_evaluator.evaluate(
+    #     generated_data=fake_straw_hats.model_dump(),
+    #     reference_data=straw_hats.model_dump()
+    # )
+    # print(f"Metadata evaluation results:\n{results_}\n---")
+
+    loader_ = DataLoader()
+    json_data = loader_.load_configuration(path="../../src/data/conversation_example_1.json")
+    print(f"json data:\n{json_data}\n---")
+    model_ = loader_.load_data(data=json_data, model_name="ScriptsBatch")
+    print(f"model dump:\n{model_.model_dump()}\n---")
+    metadata = model_.scripts[-1].reference_metadata
+    print(f"reference metadata:\n{metadata}\n---")

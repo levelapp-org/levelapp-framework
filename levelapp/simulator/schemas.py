@@ -21,15 +21,6 @@ class InteractionLevel(str, Enum):
     FINAL = "final"
 
 
-# TODO-0: Remove this?
-class InteractionDetails(BaseModel):
-    """Model representing details of a simulated interaction."""
-    reply: Optional[str] = "No response"
-    extracted_metadata: Optional[Dict[str, Any]] = {}
-    handoff_details: Optional[Dict[str, Any]] = {}
-    interaction_type: Optional[InteractionLevel] = InteractionLevel.INITIAL
-
-
 class Interaction(BaseModel):
     """Represents a single interaction within a conversation."""
     id: UUID = Field(default_factory=uuid4, description="Interaction identifier")
@@ -69,8 +60,9 @@ class InteractionResults(BaseModel):
 
 class InteractionEvaluationResults(BaseModel):
     """Model representing the evaluation result of an interaction."""
-    evaluations: Dict[str, JudgeEvaluationResults]
-    extracted_metadata_evaluation: float
+    judge_evaluations: Dict[str, JudgeEvaluationResults] = Field(default_factory=dict)
+    metadata_evaluation: Dict[str, float] = Field(default_factory=dict)
+    guardrail_flag: int = Field(default=0)
 
 
 class SimulationResults(BaseModel):
@@ -84,8 +76,6 @@ class SimulationResults(BaseModel):
     # Collected Results
     evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
     average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
-    # TODO-2: I am not sure about this 'simulation_results' field. Maybe we can remove it.
-    simulation_results: List[Dict[str, Any]] | None = Field(default_factory=list, description="Simulation results")
 
     @computed_field
     @property

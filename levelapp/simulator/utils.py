@@ -7,7 +7,7 @@ import httpx
 import arrow
 
 from uuid import UUID
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 
 from openai import OpenAI
 from pydantic import ValidationError
@@ -136,7 +136,7 @@ def parse_date_value(raw_date_value: Optional[str], default_date_value: Optional
     cached=True,
     maxsize=1000
 )
-def calculate_average_scores(scores: Dict[str, List[float]]) -> Dict[str, float]:
+def calculate_average_scores(scores: Dict[str, Union[List[float], float]]) -> Dict[str, float]:
     """
     Helper function that calculates the average scores for a dictionary of score lists.
 
@@ -146,10 +146,16 @@ def calculate_average_scores(scores: Dict[str, List[float]]) -> Dict[str, float]
     Returns:
         Dict[str, float]: A dictionary with average scores rounded to three decimal places.
     """
-    def average(values: List[float]) -> float:
-        return round(sum(values) / len(values), 3) if values else 0.0
+    result: Dict[str, float] = {}
+    for field, value in scores.items():
+        if isinstance(value, (int, float)):
+            result[field] = value
+        elif isinstance(value, list):
+            result[field] = round((sum(value) / len(value)), 3) if value else 0.0
+        else:
+            raise TypeError(f"[calculate_average_scores] Unexpected type '{type(value)}' for field '{field}")
 
-    return {key: average(values) for key, values in scores.items()}
+    return result
 
 
 @MonitoringAspect.monitor(name="summarization", category=MetricType.API_CALL)

@@ -40,7 +40,7 @@ class WorkflowConfig:
         "evaluation_params",
         "workflow",
         "repository",
-        "evaluator",
+        "evaluators",
         "reference_data",
     ]
 
@@ -48,13 +48,13 @@ class WorkflowConfig:
         self,
         workflow: WorkflowType,
         repository: RepositoryType,
-        evaluator: EvaluatorType,
+        evaluators: List[EvaluatorType],
         endpoint_config: EndpointConfig,
         inputs: Dict[str, Any],
     ):
         self.workflow = workflow
         self.repository = repository
-        self.evaluator = evaluator
+        self.evaluators = evaluators
         self.endpoint_config = endpoint_config
         self.inputs = inputs
 
@@ -70,7 +70,13 @@ class WorkflowConfig:
 
         workflow = WorkflowType(model_config.workflow)
         repository = RepositoryType(model_config.repository)
-        evaluator = EvaluatorType(model_config.evaluator)
+
+        if isinstance(model_config.evaluators, str):
+            print(f"evaluators: {model_config.evaluators}")
+            evaluators = [EvaluatorType(model_config.evaluators)]
+        else:
+            evaluators = [EvaluatorType(e) for e in model_config.evaluators]
+
         evaluation_params = model_config.evaluation_params.model_dump()
         reference_data_path = getattr(model_config.reference_data, "path", None)
         endpoint_config = EndpointConfig.model_validate(model_config.endpoint_configuration.model_dump())
@@ -78,7 +84,7 @@ class WorkflowConfig:
         return cls(
             workflow=workflow,
             repository=repository,
-            evaluator=evaluator,
+            evaluators=evaluators,
             endpoint_config=endpoint_config,
             inputs={'reference_data_path': reference_data_path, 'evaluation_params': evaluation_params},
         )
@@ -95,8 +101,14 @@ class WorkflowConfig:
             raise ValueError(f"[WorkflowConfig] Unsupported workflow type '{config.workflow}'")
         if config.repository not in RepositoryType.list():
             raise ValueError(f"[WorkflowConfig] Unsupported repository type '{config.repository}'")
-        if config.evaluator not in EvaluatorType.list():
-            raise ValueError(f"[WorkflowConfig] Invalid or missing evaluator type '{config.evaluator}'")
+
+        evals = config.evaluators
+        if isinstance(evals, str):
+            evals = [evals]
+
+        for e in evals:
+            if e not in EvaluatorType.list():
+                raise ValueError(f"[WorkflowConfig] Unsupported evaluator type '{config.evaluators}'")
 
 
 @dataclass(frozen=True)
@@ -104,6 +116,15 @@ class WorkflowContext:
     """Immutable data holder for workflow execution context."""
     config: WorkflowConfig
     repository: BaseRepository
-    evaluator: BaseEvaluator
+    evaluators: Dict[str, BaseEvaluator]
     endpoint_config: EndpointConfig
     inputs: Dict[str, Any]
+
+
+if __name__ == '__main__':
+    loader_ = DataLoader()
+    config_dict_ = loader_.load_configuration(path="../../src/data/workflow_config.yaml")
+    model_config_: BaseModel = loader_.load_data(data=config_dict_, model_name="WorkflowConfiguration")
+    print(f"model dump:\n{model_config_.model_dump()}\n---")
+    endpoint_config_ = EndpointConfig.model_validate(model_config_.endpoint_configuration.model_dump())
+    print(f"endpoint config dump:\n{model_config_.model_dump()}\n---")
