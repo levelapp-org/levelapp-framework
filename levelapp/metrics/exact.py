@@ -43,7 +43,7 @@ class ExactMatch(BaseMetric):
 class Levenshtein(BaseMetric):
     """Levenshtein edit distance (number of insertions, deletions, substitutions)"""
 
-    # @FunctionMonitor.monitor(name="levenshtein", cached=True, enable_timing=True)
+    @MonitoringAspect.monitor(name="levenshtein", category=MetricType.SCORING, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Levenshtein distance score between generated and reference strings.
@@ -76,7 +76,7 @@ class Levenshtein(BaseMetric):
 class JaroWinkler(BaseMetric):
     """Jaro-Winkler distance (similarity measure for strings)"""
 
-    # @FunctionMonitor.monitor(name="jaro_winkler", cached=True, enable_timing=True)
+    @MonitoringAspect.monitor(name="jaro-winkler", category=MetricType.SCORING, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Jaro-Winkler distance score between generated and reference strings.
@@ -109,7 +109,7 @@ class JaroWinkler(BaseMetric):
 class Hamming(BaseMetric):
     """Hamming distance (character substitutions only, for equal-length strings)"""
 
-    # @FunctionMonitor.monitor(name="hamming", cached=True)
+    @MonitoringAspect.monitor(name="hamming", category=MetricType.SCORING, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Hamming distance score between generated and reference strings.
@@ -142,7 +142,7 @@ class Hamming(BaseMetric):
 class PrefixMatch(BaseMetric):
     """Prefix similarity (1.0 if generated starts with reference)"""
 
-    # @FunctionMonitor.monitor(name="prefix_match", cached=True)
+    @MonitoringAspect.monitor(name="prefix-match", category=MetricType.SCORING, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the Prefix similarity score between generated and reference strings.

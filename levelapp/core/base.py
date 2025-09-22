@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from typing import List, Dict, Any, Callable, TypeVar, Type
 
-from levelapp.aspects import JSONSanitizer, logger
+from levelapp.aspects import JSONSanitizer
 
 
 Model = TypeVar("Model", bound=BaseModel)

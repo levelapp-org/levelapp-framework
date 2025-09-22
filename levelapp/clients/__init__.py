@@ -1,6 +1,7 @@
 """levelapp/clients/__init__.py"""
-import logging
 import dotenv
+import threading
+
 from typing import Dict, Type
 
 from levelapp.clients.anthropic import AnthropicClient
@@ -8,20 +9,21 @@ from levelapp.clients.ionos import IonosClient
 from levelapp.clients.mistral import MistralClient
 from levelapp.clients.openai import OpenAIClient
 from levelapp.core.base import BaseChatClient
-from levelapp.aspects.monitor import FunctionMonitor
+from levelapp.aspects import MonitoringAspect, logger
 
-logger = logging.getLogger(__name__)
 dotenv.load_dotenv()
 
 
 class ClientRegistry:
     """Thread-safe client registry with monitoring"""
     _clients: Dict[str, Type[BaseChatClient]] = {}
+    _lock = threading.RLock()
 
     @classmethod
     def register(cls, provider: str, client_class: Type[BaseChatClient]) -> None:
         """
         Register a client class under a provider name.
+
         Args:
             provider (str): Unique identifier for the provider.
             client_class (Type[BaseChatClient]): The client class to register.
@@ -30,15 +32,19 @@ class ClientRegistry:
             TypeError: If client_class is not a subclass of BaseChatClient.
             KeyError: If a client for the provider is already registered.
         """
-        if not issubclass(client_class, BaseChatClient):
+        if not isinstance(client_class, type) or not issubclass(client_class, BaseChatClient):
             raise TypeError(f"Client '{provider}' must be a subclass of BaseChatClient")
 
         if provider in cls._clients:
-            raise KeyError(f"Client for provider '{provider}' is already registered")
+            raise KeyError(f"[ClientRegistry] Client for provider '{provider}' is already registered")
 
-        # cls._wrap_client_methods(client_class)
+        with cls._lock:
+            if provider in cls._clients:
+                raise KeyError(f"[ClientRegistry] Client for provider '{provider}' is already registered")
+
+        cls._wrap_client_methods(client_class)
         cls._clients[provider] = client_class
-        logger.info(f"Registered client for provider: {provider}")
+        logger.info(f"[ClientRegistry] Registered client for provider: {provider}")
 
     @classmethod
     def _wrap_client_methods(cls, client_class: Type[BaseChatClient]) -> None:
@@ -51,17 +57,23 @@ class ClientRegistry:
         Raises:
             TypeError: If the methods are not callable.
         """
-        client_class.call = FunctionMonitor.monitor(
-            name=f"{client_class.__name__}.call",
-            cached=False,
-            enable_timing=True
-        )(client_class.call)
+        for method in ("call", "acall"):
+            if not hasattr(client_class, method):
+                raise TypeError(f"{client_class.__name__} missing required method: {method}")
 
-        client_class.acall = FunctionMonitor.monitor(
-            name=f"{client_class.__name__}.acall",
-            cached=False,
-            enable_timing=True
-        )(client_class.acall)
+            original = getattr(client_class, method)
+
+            if getattr(original, "_is_monitored", False):
+                continue
+
+            monitored = MonitoringAspect.monitor(
+                name=f"{client_class.__name__}.{method}",
+                cached=False,
+                enable_timing=True
+            )(original)
+
+            setattr(monitored, "_is_monitored", True)
+            setattr(client_class, method, monitored)
 
     @classmethod
     def get(cls, provider: str, **kwargs) -> BaseChatClient:
@@ -99,9 +111,9 @@ clients = {
     "anthropic": AnthropicClient
 }
 
-for provider, client_class in clients.items():
+for provider_, client_class_ in clients.items():
     try:
-        ClientRegistry.register(provider=provider, client_class=client_class)
+        ClientRegistry.register(provider=provider_, client_class=client_class_)
 
     except (TypeError, KeyError) as e:
-        logger.error(f"Failed to register client for {provider}: {e}")
+        logger.error(f"Failed to register client for {provider_}: {e}")

@@ -1,1 +1,3 @@
-from .evaluator import JudgeEvaluator
+from .evaluator import JudgeEvaluator, MetadataEvaluator
+
+__all__ = ['JudgeEvaluator', 'MetadataEvaluator']

@@ -52,9 +52,7 @@ class InteractionResults(BaseModel):
     """Represents metadata extracted from a VLA interaction."""
     generated_reply: str | None = "No response"
     generated_metadata: Dict[str, Any] | None = {}
-    # TODO-0: Change the 'guardrail_flag' type to 'bool'.
     guardrail_flag: Any | None = False
-    # TODO-1: Remove 'interaction_type'?
     interaction_type: str | None = ""
 
 

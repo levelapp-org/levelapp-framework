@@ -62,8 +62,8 @@ class WorkflowConfig:
     def load(cls, path: str | None = None) -> "WorkflowConfig":
         """Load and validate workflow configuration from a file."""
         loader = DataLoader()
-        config_dict = loader.load_configuration(path=path)
-        model_config: BaseModel = loader.load_data(data=config_dict, model_name="WorkflowConfiguration")
+        config_dict = loader.load_raw_data(path=path)
+        model_config: BaseModel = loader.create_dynamic_model(data=config_dict, model_name="WorkflowConfiguration")
 
         cls._check_fields(model_config)
         cls._check_values(model_config)
@@ -119,12 +119,3 @@ class WorkflowContext:
     evaluators: Dict[str, BaseEvaluator]
     endpoint_config: EndpointConfig
     inputs: Dict[str, Any]
-
-
-if __name__ == '__main__':
-    loader_ = DataLoader()
-    config_dict_ = loader_.load_configuration(path="../../src/data/workflow_config.yaml")
-    model_config_: BaseModel = loader_.load_data(data=config_dict_, model_name="WorkflowConfiguration")
-    print(f"model dump:\n{model_config_.model_dump()}\n---")
-    endpoint_config_ = EndpointConfig.model_validate(model_config_.endpoint_configuration.model_dump())
-    print(f"endpoint config dump:\n{model_config_.model_dump()}\n---")
