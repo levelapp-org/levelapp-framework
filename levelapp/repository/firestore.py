@@ -1,19 +1,16 @@
 """levelapp/repository/firestore.py"""
-import logging
 import google.auth
 
 from typing import List, Dict, Any, Type
+from pydantic import ValidationError
 
 from google.cloud import firestore_v1
 from google.cloud.firestore_v1 import DocumentSnapshot
 from google.api_core.exceptions import ClientError, ServerError, NotFound, InvalidArgument, DeadlineExceeded
 from google.auth.exceptions import DefaultCredentialsError
-from pydantic import ValidationError
 
 from levelapp.core.base import BaseRepository, Model
-
-
-logger = logging.getLogger(__name__)
+from levelapp.aspects import logger
 
 
 class FirestoreRepository(BaseRepository):
@@ -195,7 +192,7 @@ class FirestoreRepository(BaseRepository):
             section_id (str): Section reference.
             sub_collection_id (str): Sub-collection reference.
             filters (Dict[str, Any]): A dictionary of key-value pairs to filter the query.
-            model_type (Type[Model): The class to deserialize the documents into.
+            model_type (Type [Model]): The class to deserialize the documents into.
 
         Returns:
             A list of deserialized models that match the query.

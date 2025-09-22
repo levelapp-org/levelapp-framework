@@ -10,7 +10,7 @@ from levelapp.aspects.monitor import MonitoringAspect, MetricType
 class FuzzyRatio(BaseMetric):
     """A metric that computes the fuzzy ratio between two texts."""
 
-    @MonitoringAspect.monitor(name="fuzzy_ratio", category=MetricType.API_CALL, cached=True, enable_timing=True)
+    @MonitoringAspect.monitor(name="fuzzy-ratio", category=MetricType.API_CALL, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the fuzzy ratio between the generated text and the reference text.
@@ -46,7 +46,7 @@ class PartialRatio(BaseMetric):
     allowing for partial matches.
     """
 
-    # @FunctionMonitor.monitor(name="partial_ratio", cached=True, enable_timing=True)
+    @MonitoringAspect.monitor(name="partial-ratio", category=MetricType.SCORING, cached=True, enable_timing=True)
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the partial fuzzy ratio between the generated text and the reference text.

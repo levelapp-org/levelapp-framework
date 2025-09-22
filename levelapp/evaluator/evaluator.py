@@ -1,6 +1,5 @@
 """levelapp/core/evaluator.py"""
 from functools import lru_cache
-from importlib.metadata import metadata
 from typing import List, Dict, Any
 from collections import defaultdict
 from pydantic import BaseModel, Field
@@ -74,11 +73,29 @@ class JudgeEvaluator(BaseEvaluator):
         self.prompt_template = EVAL_PROMPT_TEMPLATE
         self.clients = defaultdict(BaseChatClient)
 
-    def register_client(self, provider: str, client: BaseChatClient):
+    def register_client(self, provider: str, client: BaseChatClient) -> None:
+        """
+        Register LLM clients used for the evaluation.
+
+        Args:
+            provider (str): The provider name.
+            client (BaseChatClient): The LLM client to register.
+        """
         self.clients[provider] = client
 
     @lru_cache(maxsize=1024)
     def _build_prompt(self, user_input: str, generated_text: str, reference_text: str) -> str:
+        """
+        Build the prompt used for the evaluation.
+
+        Args:
+            user_input (str): The user input.
+            generated_text (str): The generated text.
+            reference_text (str): The reference text.
+
+        Returns:
+            A string containing the prompt.
+        """
         return self.prompt_template.format(
             user_input=user_input,
             generated_text=generated_text,
@@ -98,6 +115,21 @@ class JudgeEvaluator(BaseEvaluator):
             user_input: str,
             provider: str,
     ) -> JudgeEvaluationResults | None:
+        """
+        Synchronous evaluation for the generated data.
+
+        Args:
+            generated_data (str): The generated data.
+            reference_data (str): The reference data.
+            user_input (str): The user input.
+            provider (str): The LLM provider user for evaluation.
+
+        Returns:
+            JudgeEvaluationResults instance containing the evaluation results.
+
+        Raises:
+            Exception: If the evaluation failed.
+        """
         prompt = self._build_prompt(
             user_input=user_input,
             generated_text=generated_data,
@@ -131,6 +163,21 @@ class JudgeEvaluator(BaseEvaluator):
             user_input: str,
             provider: str,
     ) -> JudgeEvaluationResults | None:
+        """
+        Synchronous evaluation for the generated data.
+
+        Args:
+            generated_data (str): The generated data.
+            reference_data (str): The reference data.
+            user_input (str): The user input.
+            provider (str): The LLM provider user for evaluation.
+
+        Returns:
+            JudgeEvaluationResults instance containing the evaluation results.
+
+        Raises:
+            RetryError: If the evaluation failed.
+        """
         prompt = self._build_prompt(
             user_input=user_input,
             generated_text=generated_data,
@@ -164,7 +211,6 @@ class JudgeEvaluator(BaseEvaluator):
             )
 
 
-# TODO-0: Needs more refinement (to revisit later).
 class MetadataEvaluator(BaseEvaluator):
     def __init__(self):
         self.data_loader = DataLoader()
@@ -177,8 +223,19 @@ class MetadataEvaluator(BaseEvaluator):
             reference_data: str | Dict[str, Any],
             metrics_mapping: Any | None = None,
     ) -> Dict[str, float]:
-        gen_data = self.data_loader.load_data(data=generated_data, model_name="GeneratedMetadata")
-        ref_data = self.data_loader.load_data(data=reference_data, model_name="ReferenceMetadata")
+        """
+        Synchronous evaluation for the generated data.
+
+        Args:
+              generated_data (str): The generated data.
+              reference_data (str): The reference data.
+              metrics_mapping (dict): A dictionary mapping metric names to metrics.
+
+        Returns:
+              A dict containing the evaluation results.
+        """
+        gen_data = self.data_loader.create_dynamic_model(data=generated_data, model_name="GeneratedMetadata")
+        ref_data = self.data_loader.create_dynamic_model(data=reference_data, model_name="ReferenceMetadata")
 
         if metrics_mapping:
             self.comparator.metrics_manager = metrics_mapping
@@ -198,58 +255,11 @@ class MetadataEvaluator(BaseEvaluator):
 
         return results
 
-    async def async_evaluate(self, generated_data: str | Dict[str, Any], reference_data: str | Dict[str, Any]):
+    async def async_evaluate(
+            self,
+            generated_data: str | Dict[str, Any],
+            reference_data: str | Dict[str, Any],
+            **kwargs
+    ):
         """Not implemented yet."""
-        pass
-
-
-if __name__ == '__main__':
-
-    # class Pirate(BaseModel):
-    #     name: str
-    #     role: str
-    #
-    # class Crew(BaseModel):
-    #     name: str = "Straw Hats"
-    #     crew: List[Pirate] = [Pirate(name="Monkey D. Luffy", role="Captain")]
-    #     details: Dict[str, Any] = {"Ship": "SunnyGo", "Reputation": "Good"}
-    #
-    #
-    # straw_hats = Crew(
-    #     name="Straw Hat Pirates",
-    #     crew=[
-    #         Pirate(name="Monkey D. Luffy", role="Captain"),
-    #         Pirate(name="Roronoa Zoro", role="Swordsman"),
-    #         Pirate(name="Nami", role="Navigator"),
-    #         Pirate(name="Usopp", role="Sniper"),
-    #         Pirate(name="Sanji", role="Cook")
-    #     ],
-    #     details={"ship": "Thousand Sunny", "reputation": "Legendary", "bounty": "3,161,000,100+ Berries"}
-    # )
-    #
-    # fake_straw_hats = Crew(
-    #     name="Straw Hat Pirates",
-    #     crew=[
-    #         Pirate(name="Demalo Black", role="Captain"),
-    #         Pirate(name="Manjaro", role="Swordsman"),
-    #         Pirate(name="Chocolat", role="Navigator"),
-    #         Pirate(name="Mounblutain", role="Sniper"),
-    #         Pirate(name="Drip", role="Cook")
-    #     ],
-    #     details={"ship": "", "reputation": "Fake", "bounty": "0 Berries"}
-    # )
-    #
-    # metadata_evaluator = MetadataEvaluator()
-    # results_ = metadata_evaluator.evaluate(
-    #     generated_data=fake_straw_hats.model_dump(),
-    #     reference_data=straw_hats.model_dump()
-    # )
-    # print(f"Metadata evaluation results:\n{results_}\n---")
-
-    loader_ = DataLoader()
-    json_data = loader_.load_configuration(path="../../src/data/conversation_example_1.json")
-    print(f"json data:\n{json_data}\n---")
-    model_ = loader_.load_data(data=json_data, model_name="ScriptsBatch")
-    print(f"model dump:\n{model_.model_dump()}\n---")
-    metadata = model_.scripts[-1].reference_metadata
-    print(f"reference metadata:\n{metadata}\n---")
+        raise NotImplementedError()

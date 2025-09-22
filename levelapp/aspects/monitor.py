@@ -1,9 +1,6 @@
 """levelapp/aspects.monitor.py"""
-import time
-import logging
 import threading
 import tracemalloc
-import weakref
 from contextlib import contextmanager
 
 from enum import Enum
@@ -12,13 +9,12 @@ from dataclasses import dataclass, fields
 from typing import List, Dict, Callable, Any, Union, ParamSpec, TypeVar, runtime_checkable, Protocol, Type
 
 from threading import RLock
-from functools import wraps, lru_cache
+from functools import wraps
 from datetime import datetime, timedelta
 from humanize import precisedelta, naturalsize
 
+from levelapp.aspects import logger
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 P = ParamSpec('P')
 T = TypeVar('T')
@@ -503,7 +499,7 @@ class FunctionMonitor:
                     timedelta(seconds=stats.average_duration),
                     suppress=['minutes'],
                     format='%.4f'
-                ) if stats.average_duration >0 else "0.000s",
+                ) if stats.average_duration > 0 else "0.000s",
                 'min_duration': precisedelta(
                     timedelta(seconds=min_duration),
                     suppress=['minutes'],

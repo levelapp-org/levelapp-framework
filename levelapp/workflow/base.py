@@ -93,8 +93,7 @@ class SimulatorWorkflow(BaseWorkflow):
             raise FileNotFoundError(f"[{self.name}] Reference data file not found.")
 
         evaluation_params = context.inputs.get("evaluation_params", {})
-        data_config = loader.load_configuration(path=reference_data_path)
-        # scripts_batch = loader.load_data(data=data_config, model_name="ScriptsBatch")
+        data_config = loader.load_raw_data(path=reference_data_path)
         try:
             scripts_batch = ScriptsBatch.model_validate(data_config)
         except ValidationError as e:

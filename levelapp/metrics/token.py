@@ -1,15 +1,17 @@
 """levelapp/metrics/token.py"""
 from rapidfuzz import fuzz
 
-from typing import Dict
+from typing import Dict, Any
 
 from levelapp.core.base import BaseMetric
+from levelapp.aspects.monitor import MonitoringAspect, MetricType
 
 
 class WeightedRatio(BaseMetric):
     """A metric that calculates a weighted ratio based on the other ratio algorithms"""
 
-    def compute(self, generated: str, reference: str):
+    @MonitoringAspect.monitor(name="weighted-ratio", category=MetricType.SCORING, cached=True, enable_timing=True)
+    def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the token-based metric between the generated text and the reference text.
 
@@ -42,7 +44,8 @@ class TokenSetRatio(BaseMetric):
     on unique and common words between them using fuzz.ratio.
     """
 
-    def compute(self, generated: str, reference: str):
+    @MonitoringAspect.monitor(name="token-set-ratio", category=MetricType.SCORING, cached=True, enable_timing=True)
+    def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the token-based metric between the generated text and the reference text.
 
@@ -72,7 +75,8 @@ class TokenSetRatio(BaseMetric):
 class TokenSortRatio(BaseMetric):
     """A metric that sorts the words in the strings and calculates the fuzz.ratio between them."""
 
-    def compute(self, generated: str, reference: str):
+    @MonitoringAspect.monitor(name="token-sort-ratio", category=MetricType.SCORING, cached=True, enable_timing=True)
+    def compute(self, generated: str, reference: str) -> Dict[str, Any]:
         """
         Compute the token-based metric between the generated text and the reference text.
 

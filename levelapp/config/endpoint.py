@@ -49,7 +49,6 @@ class EndpointConfig(BaseModel):
     """
     load_dotenv()
 
-    # TODO-0: Adjust the code to support both GET and POST requests.
     # Required
     method: Literal["POST", "GET"] = Field(default="POST")
     base_url: HttpUrl = Field(default=HttpUrl)
@@ -149,7 +148,6 @@ class EndpointConfig(BaseModel):
 
         return _replace(obj)
 
-    # TODO-0: Use 'Path' for path configuration.
     def load_template(
             self,
             template_type: TemplateType = TemplateType.REQUEST,
@@ -174,7 +172,6 @@ class EndpointConfig(BaseModel):
                     raise ValueError("[EndpointConfig] Unsupported file format.")
 
                 self.generated_request_payload_template = data
-                # TODO-1: Remove the return statement if not required.
                 return data
 
         except FileNotFoundError as e:

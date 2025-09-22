@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Tuple, Literal
 
 from pydantic import BaseModel
 
-from levelapp.comparator.extractor import DataExtractor
 from levelapp.core.base import BaseProcess
+from levelapp.comparator.extractor import DataExtractor
 from levelapp.comparator.scorer import MetricsManager, ComparisonResults
 from levelapp.comparator.schemas import EntityMetric, SetMetric, MetricConfig
 from levelapp.comparator.utils import format_evaluation_results

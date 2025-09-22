@@ -77,10 +77,8 @@ async def async_interaction_request(
         Optional[httpx.Response]: The response from the interaction request, or None if an error occurred.
     """
     try:
-        # logger.info(f"[async_interaction_request] Interaction request payload:\n{payload}\n---")
         async with httpx.AsyncClient(timeout=180) as client:
             response = await client.post(url=url, headers=headers, json=payload)
-            # logger.info(f"[async_interaction_request] Interaction response:\n{response.text}\n---")
             response.raise_for_status()
 
             return response
@@ -201,19 +199,3 @@ def summarize_verdicts(verdicts: List[str], judge: str, max_bullets: int = 5) ->
     except Exception as e:
         logger.error(f"[summarize_justifications] Error during summarization: {str(e)}", exc_info=True)
         return []
-
-
-if __name__ == '__main__':
-    response_data = {
-        "generated_reply": "agent_reply",
-        "generated_metadata": {"a": 1, "b": 2},
-        "guardrail": False
-    }
-    template_ = {
-        "agent_reply": "${generated_reply}",
-        "guardrail_flag": "${guardrail}",
-        "generated_metadata": "${generated_metadata}"
-    }
-
-    extracted_data = extract_interaction_details(response=response_data, template=template_)
-    print(extracted_data.model_dump())

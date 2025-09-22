@@ -1,7 +1,6 @@
 """'comparator/schemas.py': Defines Pydantic models for extracted metadata."""
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz, utils
@@ -44,7 +43,7 @@ class EntityMetric(str, Enum):
 
     @classmethod
     def list(cls):
-        return list(map(lambda x: x.value, cls))
+        return [field.value for field in cls]
 
 
 class SetMetric(str, Enum):

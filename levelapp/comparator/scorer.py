@@ -2,7 +2,7 @@
 import numpy as np
 
 from collections import namedtuple
-from typing import List, Tuple, Callable, cast, Protocol, Optional, Dict
+from typing import List, Dict, Callable, cast, Protocol
 
 from rapidfuzz import distance, process, utils, fuzz
 

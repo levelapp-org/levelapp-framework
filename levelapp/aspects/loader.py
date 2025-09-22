@@ -4,8 +4,6 @@ import yaml
 import json
 import logging
 
-from pathlib import Path
-
 from collections.abc import Mapping, Sequence
 from typing import Any, Type, TypeVar, List, Optional, Dict, Tuple
 
@@ -21,20 +19,68 @@ Model = TypeVar("Model", bound=BaseModel)
 
 class DynamicModelBuilder:
     """
-    Implements dynamic model builder.
-    -docs here-
+    A utility for creating dynamic Pydantic models at runtime from arbitrary Python
+    data structures (dicts, lists, primitives).
+
+    Features:
+    ---------
+    - **Dynamic Model Generation**: Builds `pydantic.BaseModel` subclasses on the fly
+      based on the structure of the input data.
+    - **Recursive Nesting**: Handles arbitrarily nested dictionaries and lists by
+      generating nested models automatically. (Don't freak out, it's for shallow traversal).
+    - **Field Name Sanitization**: Ensures generated field names are valid Python identifiers.
+    - **Caching**: Maintains a cache of previously generated models to avoid redundant
+      re-construction and improve performance.
+
+    Use Cases:
+    ----------
+    - Converting arbitrary JSON/dict data into structured, type-safe Pydantic models.
+    - Prototyping with dynamic/unknown payloads where upfront schema definition is not feasible.
+
+    Notes:
+    ------
+    - Field names are sanitized using `utils.default_process` (from rapidfuzz),
+      replacing spaces with underscores and handling invalid identifiers.
+    - Lists are typed based on their first element only; heterogeneous lists
+      may not be fully captured (Sorry?).
+    - Model caching is based on `(model_name, str(data) or str(sorted(keys)))`.
+      This improves performance but may cause collisions if `str(data)` is ambiguous.
     """
     def __init__(self):
+        """
+        Initialize a DynamicModelBuilder instance.
+
+        Attributes:
+        -----------
+        model_cache : Dict[Tuple[str, str], Type[BaseModel]]
+            Cache of generated models keyed by (model_name, data_signature).
+            Ensures models are reused instead of rebuilt.
+        """
         self.model_cache: Dict[Tuple[str, str], Type[BaseModel]] = {}
 
     def clear_cache(self):
+        """
+        Clear the internal model cache.
+
+        Use when schema changes are expected or to free memory in long-running processes.
+        """
         self.model_cache.clear()
 
     @staticmethod
     def _sanitize_field_name(name: str) -> str:
         """
-        Sanitize field names to be valid Python identifiers using rapidfuzz.
-        Ensures non-empty names and handles numeric-starting names.
+        Normalize and sanitize field names into valid Python identifiers.
+
+        - Converts to lowercase and strips unwanted characters using `utils.default_process`.
+        - Replaces spaces with underscores.
+        - Ensures field names are not empty; substitutes `"field_default"` if so.
+        - Prepends `"field_"` if the name starts with a digit.
+
+        Args:
+            name (str): The original field name from input data.
+
+        Returns:
+            str: A valid Python identifier for use in a Pydantic model.
         """
         name = utils.default_process(name).replace(' ', '_')
         if not name:
@@ -45,8 +91,23 @@ class DynamicModelBuilder:
 
     def _get_field_type(self, value: Any, model_name: str, key: str) -> Tuple[Any, Any]:
         """
-        Determine the field type and default value for a given value.
-        Handles dictionaries, lists, and primitive types.
+        Infer the field type and default value for a given data value.
+
+        Supported cases:
+        - **Mapping (dict-like)**: Creates a nested dynamic model recursively.
+        - **Sequence (list/tuple, non-string)**:
+          - Empty list → `List[BaseModel]`
+          - List of dicts → `List[<nested model>]`
+          - List of primitives → `List[primitive type]`
+        - **Primitive**: Wraps in `Optional` to allow nulls.
+
+        Args:
+            value (Any): The raw field value to inspect.
+            model_name (str): Name of the parent model.
+            key (str): Field name (before sanitization).
+
+        Returns:
+            Tuple[Any, Any]: A `(type, default_value)` tuple suitable for `create_model`.
         """
         if isinstance(value, Mapping):
             nested_model = self.create_dynamic_model(model_name=f"{model_name}_{key}", data=value)
@@ -70,8 +131,18 @@ class DynamicModelBuilder:
 
     def create_dynamic_model(self, model_name: str, data: Any) -> Type[BaseModel]:
         """
-        Create a Pydantic model dynamically from data.
-        Supports nested dictionaries, lists, and primitives with caching.
+        Create a dynamic Pydantic model from arbitrary input data.
+
+        - Handles nested dictionaries and lists by recursively generating
+          sub-models.
+        - Uses caching to avoid rebuilding models for the same schema.
+
+        Args:
+            model_name (str): Suggested name of the generated model.
+            data (Any): Input data (dict, list, or primitive).
+
+        Returns:
+            Type[BaseModel]: A dynamically created Pydantic model class.
         """
         model_name = self._sanitize_field_name(name=model_name)
         cache_key = (model_name, str(data) if not isinstance(data, dict) else str(sorted(data.keys())))
@@ -96,14 +167,29 @@ class DynamicModelBuilder:
 
 
 class DataLoader:
+    """Main utility tool for loading configuration and reference data"""
     def __init__(self):
         self.builder = DynamicModelBuilder()
         self._name = self.__class__.__name__
         load_dotenv()
 
-    # TODO-0: Change the method name please T-T.
     @staticmethod
-    def load_configuration(path: str | None = None):
+    def load_raw_data(path: str | None = None):
+        """
+        Load raw data from JSON or YAML files.
+
+        Args:
+            path (str): path to the JSON or YAML file.
+
+        Returns:
+            A dictionary containing the raw data.
+
+        Raises:
+            FileNotFoundError: if the file was not found in the path.
+            YAMLError: if there was an error parsing the YAML file.
+            JSONDecoderError: if there was an error parsing the JSON file.
+            IOError: if the file is corrupt and cannot be read.
+        """
         try:
             if not path:
                 path = os.getenv('WORKFLOW_CONFIG_PATH', 'no-file')
@@ -135,10 +221,7 @@ class DataLoader:
         except IOError as e:
             raise IOError(f"[EndpointConfig] Error reading file:\n{e}")
 
-        except Exception as e:
-            raise ValueError(f"[EndpointConfig] Unexpected error loading configuration:\n{e}")
-
-    def load_data(
+    def create_dynamic_model(
             self,
             data: Dict[str, Any],
             model_name: str = "ExtractedData"
