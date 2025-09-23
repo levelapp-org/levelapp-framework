@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 from levelapp.config.endpoint import EndpointConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
-from levelapp.aspects import DataLoader
+from levelapp.aspects import DataLoader, logger
 
 
 class ExtendedEnum(Enum):
@@ -81,6 +81,8 @@ class WorkflowConfig:
         reference_data_path = getattr(model_config.reference_data, "path", None)
         endpoint_config = EndpointConfig.model_validate(model_config.endpoint_configuration.model_dump())
 
+        logger.info("[WorkflowConfig] Workflow Configuration complete.")
+
         return cls(
             workflow=workflow,
             repository=repository,
@@ -110,12 +112,30 @@ class WorkflowConfig:
             if e not in EvaluatorType.list():
                 raise ValueError(f"[WorkflowConfig] Unsupported evaluator type '{config.evaluators}'")
 
+    def __repr__(self):
+        if hasattr(self, 'workflow') and all([
+            hasattr(self, 'repository'),
+            hasattr(self, 'evaluators'),
+            hasattr(self, 'endpoint_config'),
+            hasattr(self, 'inputs')
+        ]):
+            return (
+                f"WorkflowConfig details:\n"
+                f"- workflow: {self.workflow.value}\n"
+                f"- repository: {self.repository.value}\n"
+                f"- evaluators: {[e.value for e in self.evaluators]}\n"
+                f"- endpoint_config: {self.endpoint_config.model_dump_json(indent=2)}\n"
+                f"- inputs: {self.inputs}"
+            )
+        else:
+            return "WorkflowConfig(unconfigured)"
+
 
 @dataclass(frozen=True)
 class WorkflowContext:
     """Immutable data holder for workflow execution context."""
     config: WorkflowConfig
     repository: BaseRepository
-    evaluators: Dict[str, BaseEvaluator]
+    evaluators: Dict[EvaluatorType, BaseEvaluator]
     endpoint_config: EndpointConfig
     inputs: Dict[str, Any]

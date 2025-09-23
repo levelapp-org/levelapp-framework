@@ -20,7 +20,7 @@ class MainFactory:
         # Next is the RAG evaluator..
     }
 
-    _workflow_map: dict[WorkflowType, Callable[["WorkflowContext"], BaseWorkflow]] = {}
+    _workflow_map: dict[WorkflowType, Callable[[WorkflowContext], BaseWorkflow]] = {}
 
     @classmethod
     def create_repository(cls, config: WorkflowConfig) -> BaseRepository:
@@ -40,12 +40,12 @@ class MainFactory:
         return evaluators
 
     @classmethod
-    def create_workflow(cls, wf_type: WorkflowType, context: "WorkflowContext") -> BaseWorkflow:
+    def create_workflow(cls, wf_type: WorkflowType, context: WorkflowContext) -> BaseWorkflow:
         fn = cls._workflow_map.get(wf_type)
         if not fn:
             raise NotImplementedError(f"Workflow {wf_type} not implemented")
         return fn(context)
 
     @classmethod
-    def register_workflow(cls, wf_type: WorkflowType, builder: Callable[["WorkflowContext"], BaseWorkflow]) -> None:
+    def register_workflow(cls, wf_type: WorkflowType, builder: Callable[[WorkflowContext], BaseWorkflow]) -> None:
         cls._workflow_map[wf_type] = builder
