@@ -1,0 +1,9 @@
+include LICENCE
+include README.md
+include docs/*
+include examples/*
+recursive-include levelapp *.py
+exclude .env
+exclude uv.lock
+recursive-exclude tests *
+recursive-exclude src *
