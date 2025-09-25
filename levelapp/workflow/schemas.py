@@ -41,7 +41,9 @@ class WorkflowConfig:
         "workflow",
         "repository",
         "evaluators",
+        "providers",
         "reference_data",
+        "endpoint_configuration"
     ]
 
     def __init__(
@@ -49,12 +51,14 @@ class WorkflowConfig:
         workflow: WorkflowType,
         repository: RepositoryType,
         evaluators: List[EvaluatorType],
+        providers: List[str],
         endpoint_config: EndpointConfig,
         inputs: Dict[str, Any],
     ):
         self.workflow = workflow
         self.repository = repository
         self.evaluators = evaluators
+        self.providers = providers
         self.endpoint_config = endpoint_config
         self.inputs = inputs
 
@@ -63,19 +67,28 @@ class WorkflowConfig:
         """Load and validate workflow configuration from a file."""
         loader = DataLoader()
         config_dict = loader.load_raw_data(path=path)
-        model_config: BaseModel = loader.create_dynamic_model(data=config_dict, model_name="WorkflowConfiguration")
+        return cls.from_dict(config_dict)
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "WorkflowConfig":
+        loader = DataLoader()
+        model_config: BaseModel = loader.create_dynamic_model(
+            data=config_dict,
+            model_name="WorkflowConfiguration"
+        )
 
         cls._check_fields(model_config)
         cls._check_values(model_config)
 
         workflow = WorkflowType(model_config.workflow)
         repository = RepositoryType(model_config.repository)
+        evaluators = model_config.evaluators
+        providers = model_config.providers
 
-        if isinstance(model_config.evaluators, str):
-            print(f"evaluators: {model_config.evaluators}")
-            evaluators = [EvaluatorType(model_config.evaluators)]
+        if isinstance(evaluators, str):
+            evaluators = [EvaluatorType(evaluators)]
         else:
-            evaluators = [EvaluatorType(e) for e in model_config.evaluators]
+            evaluators = [EvaluatorType(e) for e in evaluators]
 
         evaluation_params = model_config.evaluation_params.model_dump()
         reference_data_path = getattr(model_config.reference_data, "path", None)
@@ -87,15 +100,19 @@ class WorkflowConfig:
             workflow=workflow,
             repository=repository,
             evaluators=evaluators,
+            providers=providers,
             endpoint_config=endpoint_config,
-            inputs={'reference_data_path': reference_data_path, 'evaluation_params': evaluation_params},
+            inputs={
+                'reference_data_path': reference_data_path,
+                'evaluation_params': evaluation_params
+            },
         )
 
     @classmethod
     def _check_fields(cls, config: BaseModel) -> None:
-        for field_name in cls._fields_list:
-            if field_name not in config.model_fields:
-                raise ValueError(f"[WorkflowConfig] Field '{field_name}' missing in configuration")
+        missing = [f for f in cls._fields_list if f not in config.model_fields]
+        if missing:
+            raise RuntimeError(f"[WorkflowConfig] Missing fields: {', '.join(missing)}")
 
     @staticmethod
     def _check_values(config: BaseModel) -> None:
@@ -124,6 +141,7 @@ class WorkflowConfig:
                 f"- workflow: {self.workflow.value}\n"
                 f"- repository: {self.repository.value}\n"
                 f"- evaluators: {[e.value for e in self.evaluators]}\n"
+                f"- providers: {self.providers}\n"
                 f"- endpoint_config: {self.endpoint_config.model_dump_json(indent=2)}\n"
                 f"- inputs: {self.inputs}"
             )
@@ -137,5 +155,6 @@ class WorkflowContext:
     config: WorkflowConfig
     repository: BaseRepository
     evaluators: Dict[EvaluatorType, BaseEvaluator]
+    providers: List[str]
     endpoint_config: EndpointConfig
     inputs: Dict[str, Any]
