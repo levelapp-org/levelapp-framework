@@ -9,10 +9,10 @@ from typing import Dict, List, Any
 from datetime import datetime
 from humanize import precisedelta
 
-from levelapp.workflow import MainFactory
+from levelapp.workflow import MainFactory, WorkflowConfig
 from levelapp.workflow.base import BaseWorkflow
-from levelapp.workflow.schemas import WorkflowConfig, WorkflowContext
 from levelapp.aspects import MetricType, ExecutionMetrics, MonitoringAspect, logger
+from levelapp.workflow.context import WorkflowContextBuilder
 
 
 class TemporalStatusMixin(ABC):
@@ -170,17 +170,10 @@ class EvaluationSession:
             if not self.workflow_config:
                 raise ValueError(f"{self._NAME}: Workflow configuration must be provided")
 
-            context = WorkflowContext(
-                config=self.workflow_config,
-                repository=MainFactory.create_repository(self.workflow_config),
-                evaluators=MainFactory.create_evaluator(self.workflow_config),
-                endpoint_config=self.workflow_config.endpoint_config,
-                inputs=self.workflow_config.inputs
-            )
-            self.workflow = MainFactory.create_workflow(
-                wf_type=self.workflow_config.workflow,
-                context=context
-            )
+            context_builder = WorkflowContextBuilder(self.workflow_config)
+            context = context_builder.build()
+
+            self.workflow = MainFactory.create_workflow(context=context)
 
         logger.info(
             f"[{self._NAME}] Starting evaluation session: {self.session_name}, "
