@@ -50,7 +50,8 @@ class WorkflowContextBuilder:
         if self.config.repository.source == "IN_MEMORY":
             inputs["reference_data"] = getattr(self.config.repository, "reference_data", {})
         else:
-            inputs["reference_data_path"] = self.config.repository.reference_data_path
+            inputs["reference_data_path"] = self.config.repository.reference_data.get("path")
+            print(f"[WorkflowContextBuilder] reference data path: {inputs['reference_data_path']}")
 
         return WorkflowContext(
             config=self.config,

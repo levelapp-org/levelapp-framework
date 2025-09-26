@@ -20,7 +20,9 @@ class EvaluationConfig(BaseModel):
 
 class RepositoryConfig(BaseModel):
     type: RepositoryType
-    reference_data_path: Optional[str] = None
+    project_id: str
+    database_name: str
+    reference_data: Dict[str, Any] = Field(default=dict)
     source: str = "LOCAL"  # LOCAL, REMOTE, IN_MEMORY
     project_id: str | None = None
     database_name: str = Field(default="(default)")
