@@ -9,8 +9,8 @@ from typing import Any
 from levelapp.core.base import BaseProcess
 from levelapp.simulator.schemas import ScriptsBatch
 from levelapp.simulator.simulator import ConversationSimulator
+from levelapp.workflow.runtime import WorkflowContext
 from levelapp.aspects.loader import DataLoader
-from levelapp.workflow.schemas import WorkflowContext
 
 
 class BaseWorkflow(ABC):
@@ -28,6 +28,7 @@ class BaseWorkflow(ABC):
         """Validate and initialize workflow-specific settings."""
         if self._initialized:
             return
+
         self.process = self._setup_process(context=self.context)
         self._initialized = True
 
@@ -80,6 +81,7 @@ class SimulatorWorkflow(BaseWorkflow):
         simulator.setup(
             repository=context.repository,
             evaluators=context.evaluators,
+            providers=context.providers,
             endpoint_config=context.endpoint_config,
         )
         return simulator
