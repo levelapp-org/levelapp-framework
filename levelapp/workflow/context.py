@@ -4,7 +4,7 @@ from typing import Dict, Callable
 from levelapp.workflow.config import WorkflowConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.runtime import WorkflowContext
-from levelapp.workflow.schemas import EvaluatorType, RepositoryType
+from levelapp.core.schemas import EvaluatorType, RepositoryType
 
 from levelapp.repository.firestore import FirestoreRepository
 from levelapp.evaluator.evaluator import JudgeEvaluator, MetadataEvaluator
@@ -47,10 +47,10 @@ class WorkflowContextBuilder:
 
         # Inputs include reference data path or in-memory dict
         inputs = {}
-        if self.config.repository.source == "IN_MEMORY":
-            inputs["reference_data"] = getattr(self.config.repository, "reference_data", {})
+        if self.config.reference_data.data:
+            inputs["reference_data"] = self.config.reference_data.data
         else:
-            inputs["reference_data_path"] = self.config.repository.reference_data.get("path")
+            inputs["reference_data_path"] = self.config.reference_data.path
             print(f"[WorkflowContextBuilder] reference data path: {inputs['reference_data_path']}")
 
         return WorkflowContext(
@@ -70,11 +70,24 @@ if __name__ == "__main__":
     config_ = WorkflowConfig.load(path="../../src/data/workflow_config.yaml")
 
     # Optional: override reference data in-memory
-    config_.repository.source = "IN_MEMORY"
-    config_.repository.reference_data = {
-        "scenarios": [{"id": "1", "dialogue": "Hello"}]
+    data = {
+        "scripts": [
+            {
+                "interactions": [
+                    {
+                        "user_message": "Hello World!",
+                        "reference_reply": "Hello, how can I help you!"
+                    },
+                    {
+                        "user_message": "I need an apartment",
+                        "reference_reply": "sorry, but I can only assist you with booking medical appointments."
+                    },
+                ]
+            },
+        ]
     }
 
+    config_.set_reference_data(content=data)
     # Build runtime context
     context = WorkflowContextBuilder(config_).build()
 

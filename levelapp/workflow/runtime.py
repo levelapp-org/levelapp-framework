@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 from levelapp.config import EndpointConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.config import WorkflowConfig
-from levelapp.workflow.schemas import EvaluatorType
+from levelapp.core.schemas import EvaluatorType
 
 
 @dataclass(frozen=True)

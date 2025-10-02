@@ -57,7 +57,7 @@ class BaseWorkflow(ABC):
         else:
             loop = asyncio.get_running_loop()
             func = partial(self.process.run, **self._input_data)
-            self._results = await loop.run_in_executor(None, func)
+            self._results = await loop.run_in_executor(None, func, None)
 
     def collect_results(self) -> Any:
         """Return unified results structure."""
@@ -105,6 +105,7 @@ class SimulatorWorkflow(BaseWorkflow):
 
         try:
             scripts_batch = ScriptsBatch.model_validate(data_config)
+
         except ValidationError as e:
             raise RuntimeError(f"[{self.name}] Validation error: {e}")
 
@@ -114,11 +115,11 @@ class SimulatorWorkflow(BaseWorkflow):
 
 
 class ComparatorWorkflow(BaseWorkflow):
-    def _setup_process(self, context: WorkflowContext) -> BaseProcess:
-        pass
-
-    def _load_input_data(self, context: WorkflowContext) -> Any:
-        pass
-
     def __init__(self, context: WorkflowContext) -> None:
         super().__init__(name="MetadataComparator", context=context)
+
+    def _setup_process(self, context: WorkflowContext) -> BaseProcess:
+        raise NotImplementedError
+
+    def _load_input_data(self, context: WorkflowContext) -> Any:
+        raise NotImplementedError

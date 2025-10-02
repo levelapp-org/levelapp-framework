@@ -1,9 +1,9 @@
 """levelapp/workflow/factory.py: Creates workflows using WorkflowContext."""
 from typing import Dict, Callable
 
+from levelapp.core.schemas import WorkflowType
 from levelapp.workflow.base import SimulatorWorkflow, ComparatorWorkflow, BaseWorkflow
 from levelapp.workflow.runtime import WorkflowContext
-from levelapp.workflow.schemas import WorkflowType
 
 
 class MainFactory:
