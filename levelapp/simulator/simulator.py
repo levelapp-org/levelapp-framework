@@ -23,7 +23,7 @@ from levelapp.simulator.utils import (
     summarize_verdicts,
 )
 from levelapp.aspects import logger
-from levelapp.workflow.schemas import EvaluatorType
+from levelapp.core.schemas import EvaluatorType
 
 
 class ConversationSimulator(BaseProcess):
@@ -33,6 +33,7 @@ class ConversationSimulator(BaseProcess):
         self,
         repository: BaseRepository | None = None,
         evaluators: Dict[EvaluatorType, BaseEvaluator] | None = None,
+        providers: List[str] | None = None,
         endpoint_config: EndpointConfig | None = None,
     ):
         """
@@ -47,6 +48,7 @@ class ConversationSimulator(BaseProcess):
 
         self.repository = repository
         self.evaluators = evaluators
+        self.providers = providers
         self.endpoint_config = endpoint_config
 
         self._url: str | None = None
@@ -60,7 +62,8 @@ class ConversationSimulator(BaseProcess):
     def setup(
             self,
             repository: BaseRepository,
-            evaluators: Dict[str, BaseEvaluator],
+            evaluators: Dict[EvaluatorType, BaseEvaluator],
+            providers: List[str],
             endpoint_config: EndpointConfig,
     ) -> None:
         """
@@ -69,6 +72,7 @@ class ConversationSimulator(BaseProcess):
         Args:
             repository (BaseRepository): Repository object for storing simulation results.
             evaluators (Dict[str, BaseEvaluator]): List of evaluator objects for evaluating interactions.
+            providers (List[str]): List of LLM provider names.
             endpoint_config (EndpointConfig): Configuration object for VLA.
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.setup.__name__}]"
@@ -76,6 +80,11 @@ class ConversationSimulator(BaseProcess):
 
         self.repository = repository
         self.evaluators = evaluators
+        self.providers = providers
+
+        if not self.providers:
+            logger.warning(f"{_LOG} No LLM providers were provided. The Judge Evaluation process will not be executed.")
+
         self.endpoint_config = endpoint_config
 
         self._url = endpoint_config.full_url
@@ -87,6 +96,7 @@ class ConversationSimulator(BaseProcess):
 
         if name not in self.evaluators:
             raise KeyError(f"{_LOG} Evaluator {name} not registered.")
+
         return self.evaluators[name]
 
     async def run(
@@ -368,50 +378,106 @@ class ConversationSimulator(BaseProcess):
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.evaluate_interaction.__name__}]"
 
-        judge_evaluator = self.evaluators.get(EvaluatorType.JUDGE)
-        metadata_evaluator = self.evaluators.get(EvaluatorType.REFERENCE)
+        judge_evaluator: BaseEvaluator | None = self.evaluators.get(EvaluatorType.JUDGE, None)
+        metadata_evaluator: BaseEvaluator | None = self.evaluators.get(EvaluatorType.REFERENCE, None)
 
-        if not judge_evaluator:
-            raise ValueError(f"{_LOG} No Judge Evaluator found.")
+        evaluation_results = InteractionEvaluationResults()
 
-        openai_eval_task = judge_evaluator.async_evaluate(
-            generated_data=generated_reply,
-            reference_data=reference_reply,
-            user_input=user_input,
-            provider="openai"
-        )
+        if judge_evaluator and self.providers:
+            await self._judge_evaluation(
+                user_input=user_input,
+                generated_reply=generated_reply,
+                reference_reply=reference_reply,
+                providers=self.providers,
+                judge_evaluator=judge_evaluator,
+                evaluation_results=evaluation_results,
+            )
+        else:
+            logger.info(f"[{_LOG}] Judge evaluation skipped (no evaluator or no providers).")
 
-        ionos_eval_task = judge_evaluator.async_evaluate(
-            provider="ionos",
-            user_input=user_input,
-            generated_data=generated_reply,
-            reference_data=reference_reply,
-        )
+        if metadata_evaluator and reference_metadata:
+            self._metadata_evaluation(
+                metadata_evaluator=metadata_evaluator,
+                generated_metadata=generated_metadata,
+                reference_metadata=reference_metadata,
+                evaluation_results=evaluation_results,
+            )
+        else:
+            logger.info(f"[{_LOG}] Metadata evaluation skipped (no evaluator or no reference metadata).")
 
-        openai_judge_evaluation, ionos_judge_evaluation = await asyncio.gather(
-            openai_eval_task, ionos_eval_task
-        )
+        evaluation_results.guardrail_flag = 1 if generated_guardrail == reference_guardrail else 0
 
-        if not metadata_evaluator:
-            raise ValueError(f"{_LOG} No Metadata Evaluator found.")
+        return evaluation_results
 
-        metadata_evaluation = {}
-        if reference_metadata:
-            metadata_evaluation = metadata_evaluator.evaluate(
+    async def _judge_evaluation(
+            self,
+            user_input: str,
+            generated_reply: str,
+            reference_reply: str,
+            providers: List[str],
+            judge_evaluator: BaseEvaluator,
+            evaluation_results: InteractionEvaluationResults,
+    ) -> None:
+        """
+        Run LLM-as-a-judge evaluation using multiple providers (async).
+
+        Args:
+            user_input (str): The user input message.
+            generated_reply (str): The generated agent reply.
+            reference_reply (str): The reference agent reply.
+            providers (List[str]): List of judge provider names.
+            judge_evaluator (BaseEvaluator): Evaluator instance.
+            evaluation_results (InteractionEvaluationResults): Results container (Pydantic model).
+
+        Returns:
+            None
+        """
+        _LOG: str = f"[{self._CLASS_NAME}][judge_evaluation]"
+
+        tasks = {
+            provider: judge_evaluator.async_evaluate(
+                generated_data=generated_reply,
+                reference_data=reference_reply,
+                user_input=user_input,
+                provider=provider,
+            )
+            for provider in providers
+        }
+
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+        for provider, result in zip(tasks.keys(), results):
+            if isinstance(result, Exception):
+                logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation.")
+                continue
+
+            evaluation_results.judge_evaluations[provider] = result
+
+    def _metadata_evaluation(
+            self,
+            metadata_evaluator: BaseEvaluator,
+            generated_metadata: Dict[str, Any],
+            reference_metadata: Dict[str, Any],
+            evaluation_results: InteractionEvaluationResults,
+    ) -> None:
+        """
+        Run metadata evaluation using the provided evaluator.
+
+        Args:
+            metadata_evaluator (BaseEvaluator): Evaluator for metadata comparison.
+            generated_metadata (Dict[str, Any]): The generated metadata.
+            reference_metadata (Dict[str, Any]): The reference metadata.
+            evaluation_results (InteractionEvaluationResults): Results container.
+        """
+        _LOG: str = f"[{self._CLASS_NAME}][metadata_evaluation]"
+
+        try:
+            evaluation_results.metadata_evaluation = metadata_evaluator.evaluate(
                 generated_data=generated_metadata,
                 reference_data=reference_metadata,
             )
-
-        guardrail_flag = 1 if generated_guardrail == reference_guardrail else 0
-
-        return InteractionEvaluationResults(
-            judge_evaluations={
-                openai_judge_evaluation.provider: openai_judge_evaluation,
-                ionos_judge_evaluation.provider: ionos_judge_evaluation
-            },
-            metadata_evaluation=metadata_evaluation,
-            guardrail_flag=guardrail_flag,
-        )
+        except Exception as e:
+            logger.error(f"[{_LOG}] Metadata evaluation failed:\n{e}", exc_info=e)
 
     @staticmethod
     def store_evaluation_results(

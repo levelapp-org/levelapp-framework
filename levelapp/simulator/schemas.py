@@ -8,7 +8,7 @@ from enum import Enum
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any, List
 from pydantic import BaseModel, Field, computed_field
 
 from levelapp.evaluator.evaluator import JudgeEvaluationResults
@@ -25,11 +25,11 @@ class Interaction(BaseModel):
     """Represents a single interaction within a conversation."""
     id: UUID = Field(default_factory=uuid4, description="Interaction identifier")
     user_message: str = Field(..., description="The user's query message")
-    generated_reply: str = Field(..., description="The agent's reply message")
+    # generated_reply: str = Field(..., description="The agent's reply message")
     reference_reply: str = Field(..., description="The preset reference message")
-    interaction_type: InteractionLevel = Field(..., description="Type of interaction")
-    reference_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Expected metadata")
-    generated_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Extracted metadata")
+    interaction_type: InteractionLevel = Field(default=InteractionLevel.INITIAL, description="Type of interaction")
+    reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
+    # generated_metadata: Dict[str, Any] = Field(default_factory=dict, description="Extracted metadata")
     guardrail_flag: bool = Field(default=False, description="Flag for guardrail signaling")
     request_payload: Dict[str, Any] = Field(default_factory=dict, description="Additional request payload")
 
@@ -38,7 +38,7 @@ class ConversationScript(BaseModel):
     """Represents a basic conversation with multiple interactions."""
     id: UUID = Field(default_factory=uuid4, description="Conversation identifier")
     interactions: List[Interaction] = Field(default_factory=list, description="List of interactions")
-    description: str = Field(..., description="A short description of the conversation")
+    description: str = Field(default="no-description", description="A short description of the conversation")
     details: Dict[str, str] = Field(default_factory=dict, description="Conversation details")
 
 
@@ -58,8 +58,8 @@ class InteractionResults(BaseModel):
 
 class InteractionEvaluationResults(BaseModel):
     """Model representing the evaluation result of an interaction."""
-    judge_evaluations: Dict[str, JudgeEvaluationResults] = Field(default_factory=dict)
-    metadata_evaluation: Dict[str, float] = Field(default_factory=dict)
+    judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(default_factory=dict)
+    metadata_evaluation: Dict[str, float] | None = Field(default_factory=dict)
     guardrail_flag: int = Field(default=0)
 
 
@@ -86,4 +86,4 @@ class TestResults(BaseModel):
     ionos_model_name: str = Field(..., alias="ionosModelName")
     test_name: str = Field(..., alias="testName")
     test_type: str = Field(..., alias="testType")
-    batch_details: Optional[SimulationResults] = Field(..., alias="results")
+    batch_details: SimulationResults | None = Field(..., alias="results")
