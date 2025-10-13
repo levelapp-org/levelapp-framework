@@ -51,7 +51,6 @@ class WorkflowContextBuilder:
             inputs["reference_data"] = self.config.reference_data.data
         else:
             inputs["reference_data_path"] = self.config.reference_data.path
-            print(f"[WorkflowContextBuilder] reference data path: {inputs['reference_data_path']}")
 
         return WorkflowContext(
             config=self.config,
