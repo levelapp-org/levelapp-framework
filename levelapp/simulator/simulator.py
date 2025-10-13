@@ -92,6 +92,15 @@ class ConversationSimulator(BaseProcess):
         self._headers = endpoint_config.headers
 
     def get_evaluator(self, name: EvaluatorType) -> BaseEvaluator:
+        """
+        Retrieve an evaluator by name.
+
+        Args:
+            name (EvaluatorType): Name of evaluator.
+
+        Returns:
+            An evaluator object.
+        """
         _LOG: str = f"[{self._CLASS_NAME}][{self.get_evaluator.__name__}]"
 
         if name not in self.evaluators:
@@ -174,7 +183,8 @@ class ConversationSimulator(BaseProcess):
         return {"scripts": results, "average_scores": overall_average_scores}
 
     async def simulate_single_scenario(
-        self, script: ConversationScript, attempts: int = 1
+        self, script: ConversationScript,
+            attempts: int = 1
     ) -> Dict[str, Any]:
         """
         Simulate a single scenario with the given number of attempts, concurrently.
@@ -193,7 +203,7 @@ class ConversationSimulator(BaseProcess):
         all_attempts_verdicts: Dict[str, List[str]] = defaultdict(list)
 
         async def simulate_attempt(attempt_number: int) -> Dict[str, Any]:
-            logger.info(f"{_LOG} Running attempt: {attempt_number + 1}/{attempts}")
+            logger.info(f"{_LOG} Running attempt: {attempt_number + 1}/{attempts}\n---")
             start_time = time.time()
 
             collected_scores: Dict[str, List[Any]] = defaultdict(list)
@@ -205,7 +215,6 @@ class ConversationSimulator(BaseProcess):
                 collected_scores=collected_scores,
             )
 
-            logger.info(f"{_LOG} collected_scores: {collected_scores}\n---")
             single_attempt_scores = calculate_average_scores(collected_scores)
 
             for target, scores in single_attempt_scores.items():
@@ -237,10 +246,6 @@ class ConversationSimulator(BaseProcess):
 
         for judge_, verdicts_ in all_attempts_verdicts.items():
             self.evaluation_verdicts[judge_].extend(verdicts_)
-
-        logger.info(
-            f"{_LOG} average scores:\n{average_scores}\n---"
-        )
 
         return {
             "script_id": script.id,
@@ -324,8 +329,6 @@ class ConversationSimulator(BaseProcess):
                 reference_guardrail=reference_guardrail_flag,
             )
 
-            logger.info(f"{_LOG} Evaluation results:\n{evaluation_results.model_dump()}\n")
-
             self.store_evaluation_results(
                 results=evaluation_results,
                 evaluation_verdicts=evaluation_verdicts,
@@ -333,9 +336,7 @@ class ConversationSimulator(BaseProcess):
             )
 
             elapsed_time = time.time() - start_time
-            logger.info(
-                f"{_LOG} Interaction simulation complete in {elapsed_time:.2f} seconds.\n---"
-            )
+            logger.info(f"{_LOG} Interaction simulation complete in {elapsed_time:.2f} seconds.\n---")
 
             result = {
                 "user_message": user_message,
@@ -494,7 +495,7 @@ class ConversationSimulator(BaseProcess):
             collected_scores (Dict[str, List[Any]]): The collected scores.
         """
         for provider in results.judge_evaluations.keys():
-            evaluation_verdicts[f"{provider}_verdicts_summary"].append(
+            evaluation_verdicts[f"{provider}"].append(
                 results.judge_evaluations.get(provider, "").justification
             )
 

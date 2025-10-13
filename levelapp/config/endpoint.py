@@ -29,7 +29,6 @@ class EndpointConfig(BaseModel):
         bearer_token (SecretStr): The Bearer token to use.
         model_id (str): The model to use (if applicable).
         default_request_payload_template (Dict[str, Any]): The payload template to use.
-        generated_request_payload_template (Dict[str, Any]): The generated payload template from a provided file.
         variables (Dict[str, Any]): The variables to populate the payload template.
 
     Note:
@@ -40,11 +39,10 @@ class EndpointConfig(BaseModel):
         - bearer_token (SecretStr): The Bearer token to use.
         - model_id (str): The model to use (if applicable).
         - default_payload_template (Dict[str, Any]): The payload template to use.
-        - generated_payload_template (Dict[str, Any]): The generated payload template from a provided file.
         - variables (Dict[str, Any]): The variables to populate the payload template.
 
         Or manually configure the model instance by assigning the proper values to the model fields.\n
-        You can also provide the path in the .env file for the payload template (ENDPOINT_PAYLOAD_PATH)
+        You can also provide the path in the .env file for the payload template (ENDPOINT_PAYLOAD_PATH/)
         and the response template (ENDPOINT_RESPONSE_PATH) separately. The files can be either YAML or JSON only.
     """
     load_dotenv()
@@ -61,9 +59,7 @@ class EndpointConfig(BaseModel):
 
     # Data
     default_request_payload_template: Dict[str, Any] = Field(default_factory=dict)
-    generated_request_payload_template: Dict[str, Any] = Field(default_factory=dict)
     default_response_payload_template: Dict[str, Any] = Field(default_factory=dict)
-    generated_response_payload_template: Dict[str, Any] = Field(default_factory=dict)
 
     # Variables
     variables: Dict[str, Any] = Field(default_factory=dict)
@@ -88,14 +84,18 @@ class EndpointConfig(BaseModel):
     @computed_field
     @property
     def request_payload(self) -> Dict[str, Any]:
-        """Return fully prepared payload depending on template or full payload."""
-        # First, load the request payload template (either from YAML config file or from specific template)
+        """
+        Return fully prepared payload depending on template or full payload.
+
+        Returns:
+            request payload (Dict[str, Any]): Populated request payload template.
+        """
+        # First, we check if we have variables to populate the template with. If not, we return the template as is.
         if not self.variables:
             return self.default_request_payload_template
 
         if not self.default_request_payload_template:
-            self.load_template(template_type=TemplateType.REQUEST)
-            base_template = self.generated_request_payload_template
+            base_template = self.load_template(template_type=TemplateType.REQUEST)
         else:
             base_template = self.default_request_payload_template
 
@@ -118,8 +118,7 @@ class EndpointConfig(BaseModel):
             return self.default_response_payload_template
 
         if not self.default_response_payload_template:
-            self.load_template(template_type=TemplateType.RESPONSE)
-            base_template = self.generated_response_payload_template
+            base_template = self.load_template(template_type=TemplateType.RESPONSE)
         else:
             base_template = self.default_response_payload_template
 
@@ -148,12 +147,23 @@ class EndpointConfig(BaseModel):
 
         return _replace(obj)
 
+    @staticmethod
     def load_template(
-            self,
             template_type: TemplateType = TemplateType.REQUEST,
             path: str | None = None
     ) -> Dict[str, Any]:
+        """
+        Load request/response payload template from JSON/YAML file.
+
+        Args:
+            template_type (TemplateType): The type of template to load (REQUEST or RESPONSE).
+            path (str): The path of the payload template file to load.
+
+        Returns:
+            Payload template (Dict[str, Any]): Payload template.
+        """
         try:
+            # If no path was provided, we check the env. variables.
             if not path:
                 env_var = "ENDPOINT_PAYLOAD_PATH" if template_type == TemplateType.REQUEST else "ENDPOINT_RESPONSE_PATH"
                 path = os.getenv(env_var, '')
@@ -171,7 +181,6 @@ class EndpointConfig(BaseModel):
                 else:
                     raise ValueError("[EndpointConfig] Unsupported file format.")
 
-                self.generated_request_payload_template = data
                 return data
 
         except FileNotFoundError as e:

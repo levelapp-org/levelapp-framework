@@ -22,5 +22,3 @@ class EvaluatorType(ExtendedEnum):
     JUDGE = "JUDGE"
     REFERENCE = "REFERENCE"
     RAG = "RAG"
-
-

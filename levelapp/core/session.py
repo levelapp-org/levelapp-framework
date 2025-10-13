@@ -63,6 +63,14 @@ class StepContext:
             step_name: str,
             category: MetricType,
     ):
+        """
+        Initialize StepContext.
+
+        Args:
+            session (EvaluationSession): Evaluation session.
+            step_name (str): Step name.
+            category (MetricType): Metric type.
+        """
         self.session = session
         self.step_name = step_name
         self.category = category
@@ -119,7 +127,7 @@ class StepContext:
 
             self.session.session_metadata.total_executions += 1
 
-            if self.step_meta.duration:
+            if self.session.enable_monitoring and self.step_meta.duration:
                 self.session.monitor.update_procedure_duration(
                     name=self.full_step_name,
                     value=self.step_meta.duration
@@ -176,7 +184,7 @@ class EvaluationSession:
             self.workflow = MainFactory.create_workflow(context=context)
 
         logger.info(
-            f"[{self._NAME}] Starting evaluation session: {self.session_name}, "
+            f"[{self._NAME}] Starting evaluation session: {self.session_name} - "
             f"Workflow: '{self.workflow.name}'"
         )
         return self
@@ -190,6 +198,7 @@ class EvaluationSession:
 
         if exc_type:
             logger.error(f"[{self._NAME}] Session ended with error: {exc_val}", exc_info=True)
+
         return False
 
     def step(self, step_name: str, category: MetricType = MetricType.CUSTOM) -> StepContext:
@@ -213,6 +222,19 @@ class EvaluationSession:
             self.workflow.collect_results()
 
     def get_stats(self) -> Dict[str, Any]:
+        if self.enable_monitoring:
+            return {
+                "session": {
+                    "name": self.session_name,
+                    "duration": precisedelta(self.session_metadata.duration, suppress=['minutes']),
+                    "start_time": self.session_metadata.started_at.isoformat(),
+                    "end_time": self.session_metadata.ended_at.isoformat(),
+                    "steps": len(self.session_metadata.steps),
+                    "errors": sum(s.error_count for s in self.session_metadata.steps.values())
+                },
+                "stats": self.monitor.get_all_stats()
+            }
+
         return {
             "session": {
                 "name": self.session_name,
@@ -222,5 +244,4 @@ class EvaluationSession:
                 "steps": len(self.session_metadata.steps),
                 "errors": sum(s.error_count for s in self.session_metadata.steps.values())
             },
-            "stats": self.monitor.get_all_stats()
         }
