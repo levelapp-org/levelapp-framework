@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pydantic import ValidationError
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 
 from levelapp.core.base import BaseProcess
 from levelapp.simulator.schemas import ScriptsBatch
@@ -60,15 +60,32 @@ class BaseWorkflow(ABC):
             self._results = await loop.run_in_executor(None, func, None)
 
     def collect_results(self) -> Any:
-        """Return unified results structure."""
+        """
+        Return unified results structure.
+
+        Returns:
+            The simulation results.
+        """
         return self._results
 
     @abstractmethod
     def _setup_process(self, context: WorkflowContext) -> BaseProcess:
+        """
+        Abstract method for setting up the configured process.
+
+        Args:
+            context (WorkflowContext): The workflow context.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def _load_input_data(self, context: WorkflowContext) -> Any:
+        """
+        Abstract method for loading reference data.
+
+        Args:
+            context (WorkflowContext): The workflow context.
+        """
         raise NotImplementedError
 
 
@@ -77,6 +94,15 @@ class SimulatorWorkflow(BaseWorkflow):
         super().__init__(name="ConversationSimulator", context=context)
 
     def _setup_process(self, context: WorkflowContext) -> BaseProcess:
+        """
+        Concrete implementation for setting up the simulation workflow.
+
+        Args:
+            context (WorkflowContext): The workflow context for the simulation workflow.
+
+        Returns:
+            ConversationSimulator instance.
+        """
         simulator = ConversationSimulator()
         simulator.setup(
             repository=context.repository,
@@ -86,7 +112,16 @@ class SimulatorWorkflow(BaseWorkflow):
         )
         return simulator
 
-    def _load_input_data(self, context: WorkflowContext) -> Any:
+    def _load_input_data(self, context: WorkflowContext) -> Dict[str, Any]:
+        """
+        Concrete implementation for loading the reference data.
+
+        Args:
+            context (WorkflowContext): The workflow context for the simulation workflow.
+
+        Returns:
+            Dict[str, Any]: The reference data.
+        """
         loader = DataLoader()
         if "reference_data" in context.inputs:
             data_config = context.inputs["reference_data"]

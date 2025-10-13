@@ -2,6 +2,7 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
+from levelapp.aspects import logger
 from levelapp.config.endpoint import EndpointConfig
 from levelapp.core.schemas import WorkflowType, RepositoryType, EvaluatorType
 
@@ -47,19 +48,45 @@ class WorkflowConfig(BaseModel):
         extra = "allow"
 
     @classmethod
-    def load(cls, path: Optional[str] = None) -> "WorkflowConfig":
-        """Load workflow configuration from a YAML/JSON file."""
+    def load(cls, path: str | None = None) -> "WorkflowConfig":
+        """
+        Load workflow configuration from a YAML/JSON file.
+
+        Args:
+            path (str): YAML/JSON configuration file path.
+
+        Returns:
+            WorkflowConfig: An instance of WorkflowConfig.
+        """
         from levelapp.aspects.loader import DataLoader
 
         loader = DataLoader()
         config_dict = loader.load_raw_data(path=path)
+        logger.info(f"[{cls.__name__}] Workflow configuration loaded from '{path}' file content")
         return cls.model_validate(config_dict)
 
     @classmethod
     def from_dict(cls, content: Dict[str, Any]) -> "WorkflowConfig":
-        """Load workflow configuration from an in-memory dict."""
+        """
+        Load workflow configuration from an in-memory dict.
+
+        Args:
+            content (dict): Workflow configuration content.
+
+        Returns:
+            WorkflowConfig: An instance of WorkflowConfig.
+        """
+        logger.info(f"[{cls.__name__}] Workflow configuration loaded from provided content")
         return cls.model_validate(content)
 
     def set_reference_data(self, content: Dict[str, Any]) -> None:
-        """Load referer data from an in-memory dict."""
+        """
+        Load referer data from an in-memory dict.
+
+        Args:
+            content (dict): Workflow configuration content.
+
+        """
         self.reference_data.data = content
+        logger.info(f"[{self.__class__.__name__}] Reference data loaded from provided content")
+
