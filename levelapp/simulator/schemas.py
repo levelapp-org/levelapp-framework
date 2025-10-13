@@ -79,11 +79,3 @@ class SimulationResults(BaseModel):
     @property
     def elapsed_time(self) -> float:
         return (self.finished_at - self.started_at).total_seconds()
-
-
-class TestResults(BaseModel):
-    api_host: str = Field(..., alias="apiHost")
-    ionos_model_name: str = Field(..., alias="ionosModelName")
-    test_name: str = Field(..., alias="testName")
-    test_type: str = Field(..., alias="testType")
-    batch_details: SimulationResults | None = Field(..., alias="results")
