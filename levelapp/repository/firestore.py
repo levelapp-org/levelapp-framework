@@ -1,7 +1,5 @@
 """levelapp/repository/firestore.py"""
-import google.auth
-
-from typing import List, Dict, Any, Type
+from typing import List, Dict, Any, Type, TYPE_CHECKING
 from pydantic import ValidationError
 
 from google.cloud import firestore_v1
@@ -13,15 +11,25 @@ from levelapp.core.base import BaseRepository, Model
 from levelapp.aspects import logger
 
 
+if TYPE_CHECKING:
+    from levelapp.workflow.config import WorkflowConfig
+
+
 class FirestoreRepository(BaseRepository):
     """
     Firestore implementation of BaseRepository.
     (Uses hierarchical path: {user_id}/{collection_id}/{document_id}
     """
 
-    def __init__(self, project_id: str | Any = None, database_name: str | Any = '(default)'):
-        self.project_id = project_id
-        self.database_name = database_name
+    def __init__(self, config: "WorkflowConfig | None"):
+        if config:
+            self.config = config
+            self.project_id: str | Any = config.repository.project_id
+            self.database_name: str | Any = config.repository.database_name
+        else:
+            self.project_id: str | Any = None
+            self.database_name: str | Any = '(default)'
+
         self.client: firestore_v1.Client | None = None
 
     def connect(self) -> None:
@@ -29,6 +37,7 @@ class FirestoreRepository(BaseRepository):
         Connects to Firestore, prioritizing the project ID passed to the constructor.
         """
         try:
+            import google.auth
             credentials, default_project_id = google.auth.default()
 
             if not credentials:

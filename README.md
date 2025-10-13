@@ -43,38 +43,47 @@ pip install levelapp
 LevelApp uses a YAML configuration file to define the evaluation setup. Create a `workflow_config.yaml` with the following structure:
 
 ```yaml
-project_name: "test-project"
-evaluation_params:
-  attempts: 1  # Number of simulation attempts.
+process:
+  project_name: "test-project"
+  workflow_type: SIMULATOR # Pick one of the following workflows: SIMULATOR, COMPARATOR, ASSESSOR.
+  evaluation_params:
+    attempts: 1  # Add the number of simulation attempts.
+    batch_size: 5
 
-workflow: SIMULATOR  # SIMULATOR, COMPARATOR, ASSESSOR.
-repository: FIRESTORE  # FIRESTORE, FILESYSTEM, MONGODB.
-evaluators: # JUDGE, REFERENCE, RAG.
-  - JUDGE
-  - REFERENCE
+evaluation:
+  evaluators: # Select from the following: JUDGE, REFERENCE, RAG.
+    - JUDGE
+    - REFERENCE
+  providers:
+    - openai
+    - ionos
+  metrics_map:
+    field_1: EXACT
+    field_2 : LEVENSHTEIN
 
-endpoint_configuration:
+reference_data:
+  path: 
+  data:
+
+endpoint:
   base_url: "http://127.0.0.1:8000"
   url_path: ''
   api_key: "<API-KEY>"
   bearer_token: "<BEARER-TOKEN>"
   model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
-  payload_path: "../../src/data/payload_example_1.yaml"
   default_request_payload_template:
+    # Change the user message field name only according to the request payload schema (example: 'prompt' to 'message').
     prompt: "${user_message}"
     details: "${request_payload}"  # Rest of the request payload data.
   default_response_payload_template:
+    # Change the placeholder value only according to the response payload schema (example: ${agent_reply} to ${reply}).
     agent_reply: "${agent_reply}"
-    guardrail_flag: "${guardrail_flag}"
     generated_metadata: "${generated_metadata}"
 
-reference_data:
-  source: LOCAL  # LOCAL or REMOTE.
-  path: "../../src/data/conversation_example_1.json"
-
-metrics_map:
-  field_1: EXACT
-  field_2: LEVENSHTEIN
+repository:
+  type: FIRESTORE # Pick one of the following: FIRESTORE, FILESYSTEM, MONGODB.
+  project_id: "(default)"
+  database_name: ""
 ```
 
 - **Endpoint Configuration**: Define how to interact with your LLM-based system (base URL, auth, payload templates).
@@ -85,33 +94,26 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
 
 ```json
 {
-  "id": "1fa6f6ed-3cfe-4c0b-b389-7292f58879d4",
   "scripts": [
     {
-      "id": "65f58cec-d55d-4a24-bf16-fa8327a3aa6b",
       "interactions": [
         {
-          "id": "e99a2898-6a79-4a20-ac85-dfe977ea9935",
           "user_message": "Hello, I would like to book an appointment with a doctor.",
           "reference_reply": "Sure, I can help with that. Could you please specify the type of doctor you need to see?",
           "interaction_type": "initial",
           "reference_metadata": {},
-          "generated_metadata": {},
           "guardrail_flag": false,
           "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
         },
         {
-          "id": "fe5c539a-d0a1-40ee-97bd-dbe456703ccc",
           "user_message": "I need to see a cardiologist.",
           "reference_reply": "When would you like to schedule your appointment?",
           "interaction_type": "intermediate",
           "reference_metadata": {},
-          "generated_metadata": {},
           "guardrail_flag": false,
           "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
         },
         {
-          "id": "2cfdbd1c-a065-48bb-9aa9-b958342154b1",
           "user_message": "I would like to book it for next Monday morning.",
           "reference_reply": "We have an available slot at 10 AM next Monday. Does that work for you?",
           "interaction_type": "intermediate",
@@ -119,11 +121,6 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
             "appointment_type": "Cardiology",
             "date": "next Monday",
             "time": "10 AM"
-          },
-          "generated_metadata": {
-            "appointment_type": "Cardiology",
-            "date": "next Monday",
-            "time": "morning"
           },
           "guardrail_flag": false,
           "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
@@ -134,7 +131,6 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
           "reference_reply": "Your appointment with the cardiologist is booked for 10 AM next Monday. Is there anything else I can help you with?",
           "interaction_type": "final",
           "reference_metadata": {},
-          "generated_metadata": {},
           "guardrail_flag": false,
           "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
         }
@@ -147,8 +143,21 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
   ]
 }
 ```
-
 - **Fields**: Include user messages, reference/references replies, metadata for comparison, guardrail flags, and request payloads.
+
+In the `.env` you need to add the LLM providers credentials that will be used for the evaluation process. 
+```
+OPENAI_API_KEY=
+IONOS_API_KEY=
+ANTHROPIC_API_KEY=
+MISTRAL_API_KEY=
+
+# For IONOS, you must include the base URL and the model ID.
+IONOS_BASE_URL="https://inference.de-txl.ionos.com"
+IONOS_MODEL_ID="0b6c4a15-bb8d-4092-82b0-f357b77c59fd"
+
+WORKFLOW_CONFIG_PATH="../../src/data/workflow_config_1.yaml"
+```
 
 ## Usage Example
 
@@ -166,7 +175,7 @@ if __name__ == "__main__":
     config = WorkflowConfig.load(path="../data/workflow_config.yaml")
 
     # Run evaluation session
-    with EvaluationSession(session_name="sim-test", workflow_config=config) as session:
+    with EvaluationSession(session_name="test-session-1", workflow_config=config) as session:
         session.run()
         results = session.workflow.collect_results()
         print("Results:", results)
@@ -174,6 +183,59 @@ if __name__ == "__main__":
     stats = session.get_stats()
     print(f"session stats:\n{stats}")
 ```
+
+Alternatively, if you want to pass the configuration and reference data from in-memory variables, 
+you can manually load the data like the following:
+```python
+if __name__ == "__main__":
+    from levelapp.workflow import WorkflowConfig
+    from levelapp.core.session import EvaluationSession
+
+    # Firestore -> retrieve endpoint config -> data => config_dict
+
+    config_dict = {
+        "process": {"project_name": "test-project", "workflow_type": "SIMULATOR", "evaluation_params": {"attempts": 2}},
+        "evaluation": {"evaluators": ["JUDGE"], "providers": ["openai", "ionos"]},
+        "reference_data": {"path": "", "data": {}},
+        "endpoint": {"base_url": "http://127.0.0.1:8000", "api_key": "key", "model_id": "model"},
+        "repository": {"type": "FIRESTORE", "source": "IN_MEMORY", "metrics_map": {"field_1": "EXACT"}},
+    }
+
+    content = {
+        "scripts": [
+            {
+                "interactions": [
+                    {
+                        "user_message": "Hello!",
+                        "reference_reply": "Hello, how can I help you!"
+                    },
+                    {
+                        "user_message": "I need an apartment",
+                        "reference_reply": "sorry, but I can only assist you with booking medical appointments."
+                    },
+                ]
+            },
+        ]
+    }
+
+    # Load configuration from a dict variable
+    config = WorkflowConfig.from_dict(content=config_dict)
+
+    # Load reference data from dict variable
+    config.set_reference_data(content=content)
+
+    evaluation_session = EvaluationSession(session_name="test-session-2", workflow_config=config)
+
+    with evaluation_session as session:
+        session.run()
+        results = session.workflow.collect_results()
+        print("Results:", results)
+
+    stats = session.get_stats()
+    print(f"session stats:\n{stats}")
+
+```
+
 
 - This loads the config, runs the specified workflow (e.g., Simulator), collects results, and prints stats.
 

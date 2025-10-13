@@ -1,51 +1,29 @@
-from typing import Callable, Dict
-from levelapp.workflow.schemas import WorkflowType, RepositoryType, EvaluatorType, WorkflowConfig, WorkflowContext
-from levelapp.core.base import BaseRepository, BaseEvaluator
-from levelapp.workflow.base import BaseWorkflow
+"""levelapp/workflow/factory.py: Creates workflows using WorkflowContext."""
+from typing import Dict, Callable
 
-from levelapp.repository.firestore import FirestoreRepository
-from levelapp.evaluator.evaluator import JudgeEvaluator, MetadataEvaluator
+from levelapp.core.schemas import WorkflowType
+from levelapp.workflow.base import SimulatorWorkflow, ComparatorWorkflow, BaseWorkflow
+from levelapp.workflow.runtime import WorkflowContext
 
 
 class MainFactory:
-    """Central factory for repositories, evaluators, and workflows."""
+    """Central factory for workflows."""
 
-    _repository_map: dict[RepositoryType, Callable[[WorkflowConfig], BaseRepository]] = {
-        RepositoryType.FIRESTORE: lambda cfg: FirestoreRepository(),
+    _workflow_map: Dict[WorkflowType, Callable[[WorkflowContext], BaseWorkflow]] = {
+        WorkflowType.SIMULATOR: lambda ctx: SimulatorWorkflow(ctx),
+        WorkflowType.COMPARATOR: lambda ctx: ComparatorWorkflow(ctx),
     }
 
-    _evaluator_map: dict[EvaluatorType, Callable[[WorkflowConfig], BaseEvaluator]] = {
-        EvaluatorType.JUDGE: lambda cfg: JudgeEvaluator(),
-        EvaluatorType.REFERENCE: lambda cfg: MetadataEvaluator(),
-        # Next is the RAG evaluator..
-    }
-
-    _workflow_map: dict[WorkflowType, Callable[["WorkflowContext"], BaseWorkflow]] = {}
+    @classmethod
+    def create_workflow(cls, context: WorkflowContext) -> BaseWorkflow:
+        """Create workflow using the given runtime context."""
+        wf_type = context.config.process.workflow_type
+        builder = cls._workflow_map.get(wf_type)
+        if not builder:
+            raise NotImplementedError(f"Workflow '{wf_type}' not implemented")
+        return builder(context)
 
     @classmethod
-    def create_repository(cls, config: WorkflowConfig) -> BaseRepository:
-        fn = cls._repository_map.get(config.repository)
-        if not fn:
-            raise NotImplementedError(f"Repository {config.repository} not implemented")
-        return fn(config)
-
-    @classmethod
-    def create_evaluator(cls, config: WorkflowConfig) -> Dict[EvaluatorType, BaseEvaluator]:
-        evaluators: dict[EvaluatorType, BaseEvaluator] = {}
-        for ev in config.evaluators:
-            fn = cls._evaluator_map.get(ev)
-            if not fn:
-                raise NotImplementedError(f"Evaluator {config.evaluators} not implemented")
-            evaluators[ev] = fn(config)
-        return evaluators
-
-    @classmethod
-    def create_workflow(cls, wf_type: WorkflowType, context: "WorkflowContext") -> BaseWorkflow:
-        fn = cls._workflow_map.get(wf_type)
-        if not fn:
-            raise NotImplementedError(f"Workflow {wf_type} not implemented")
-        return fn(context)
-
-    @classmethod
-    def register_workflow(cls, wf_type: WorkflowType, builder: Callable[["WorkflowContext"], BaseWorkflow]) -> None:
+    def register_workflow(cls, wf_type: WorkflowType, builder: Callable[[WorkflowContext], BaseWorkflow]) -> None:
+        """Register a new workflow implementation."""
         cls._workflow_map[wf_type] = builder

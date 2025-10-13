@@ -1,5 +1,6 @@
 from . import registration
-from .schemas import WorkflowType
+from .base import BaseWorkflow
+from .config import WorkflowConfig
 from .factory import MainFactory
 
-__all__ = ["WorkflowType", "MainFactory"]
+__all__ = ["BaseWorkflow", "WorkflowConfig", "MainFactory"]

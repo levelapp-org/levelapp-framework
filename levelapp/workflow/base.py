@@ -9,8 +9,8 @@ from typing import Any
 from levelapp.core.base import BaseProcess
 from levelapp.simulator.schemas import ScriptsBatch
 from levelapp.simulator.simulator import ConversationSimulator
+from levelapp.workflow.runtime import WorkflowContext
 from levelapp.aspects.loader import DataLoader
-from levelapp.workflow.schemas import WorkflowContext
 
 
 class BaseWorkflow(ABC):
@@ -28,6 +28,7 @@ class BaseWorkflow(ABC):
         """Validate and initialize workflow-specific settings."""
         if self._initialized:
             return
+
         self.process = self._setup_process(context=self.context)
         self._initialized = True
 
@@ -56,7 +57,7 @@ class BaseWorkflow(ABC):
         else:
             loop = asyncio.get_running_loop()
             func = partial(self.process.run, **self._input_data)
-            self._results = await loop.run_in_executor(None, func)
+            self._results = await loop.run_in_executor(None, func, None)
 
     def collect_results(self) -> Any:
         """Return unified results structure."""
@@ -80,34 +81,45 @@ class SimulatorWorkflow(BaseWorkflow):
         simulator.setup(
             repository=context.repository,
             evaluators=context.evaluators,
+            providers=context.providers,
             endpoint_config=context.endpoint_config,
         )
         return simulator
 
     def _load_input_data(self, context: WorkflowContext) -> Any:
         loader = DataLoader()
-        reference_data_path = context.inputs.get("reference_data_path", "no-path-provided")
-        file_path = Path(reference_data_path)
+        if "reference_data" in context.inputs:
+            data_config = context.inputs["reference_data"]
+        else:
+            reference_data_path = context.inputs.get("reference_data_path", "no-path-provided")
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"[{self.name}] Reference data file not found.")
+            if not reference_data_path:
+                raise RuntimeError(f"[{self.name}] No reference data available.")
 
-        evaluation_params = context.inputs.get("evaluation_params", {})
-        data_config = loader.load_raw_data(path=reference_data_path)
+            file_path = Path(reference_data_path)
+
+            if not file_path.exists():
+                raise FileNotFoundError(f"[{self.name}] Reference data file not found.")
+
+            data_config = loader.load_raw_data(path=reference_data_path)
+
         try:
             scripts_batch = ScriptsBatch.model_validate(data_config)
+
         except ValidationError as e:
             raise RuntimeError(f"[{self.name}] Validation error: {e}")
 
-        return {"test_batch": scripts_batch, "attempts": evaluation_params.get("attempts", 1)}
+        attempts = context.config.process.evaluation_params.get("attempts", 1)
+
+        return {"test_batch": scripts_batch, "attempts": attempts}
 
 
 class ComparatorWorkflow(BaseWorkflow):
-    def _setup_process(self, context: WorkflowContext) -> BaseProcess:
-        pass
-
-    def _load_input_data(self, context: WorkflowContext) -> Any:
-        pass
-
     def __init__(self, context: WorkflowContext) -> None:
         super().__init__(name="MetadataComparator", context=context)
+
+    def _setup_process(self, context: WorkflowContext) -> BaseProcess:
+        raise NotImplementedError
+
+    def _load_input_data(self, context: WorkflowContext) -> Any:
+        raise NotImplementedError

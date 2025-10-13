@@ -1,7 +1,6 @@
 """levelapp/core/evaluator.py"""
 from functools import lru_cache
-from typing import List, Dict, Any
-from collections import defaultdict
+from typing import List, Dict, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 from tenacity import (
@@ -18,6 +17,9 @@ from levelapp.comparator import MetricsManager, MetadataComparator
 from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE
 from levelapp.core.base import BaseEvaluator, BaseChatClient
 from levelapp.aspects import MonitoringAspect, MetricType, logger, DataLoader
+
+if TYPE_CHECKING:
+    from levelapp.workflow.config import WorkflowConfig
 
 
 class Evidence(BaseModel):
@@ -69,19 +71,29 @@ class JudgeEvaluationResults(BaseModel):
 
 
 class JudgeEvaluator(BaseEvaluator):
-    def __init__(self):
-        self.prompt_template = EVAL_PROMPT_TEMPLATE
-        self.clients = defaultdict(BaseChatClient)
+    def __init__(self, config: "WorkflowConfig | None" = None):
+        if config:
+            self.config = config
+            self.providers = config.evaluation.providers
 
-    def register_client(self, provider: str, client: BaseChatClient) -> None:
+        self.prompt_template = EVAL_PROMPT_TEMPLATE
+        self.client_registry = ClientRegistry
+
+    def select_client(self, provider: str) -> BaseChatClient:
         """
-        Register LLM clients used for the evaluation.
+        Select an LLM client to use for the evaluation.
 
         Args:
             provider (str): The provider name.
-            client (BaseChatClient): The LLM client to register.
+
+        Returns:
+            client (BaseChatClient): The LLM client to use for the evaluation.
         """
-        self.clients[provider] = client
+        if provider not in self.client_registry.list_providers():
+            logger.warning(f"[JudgeEvaluator] {provider} is not registered. Defaulting to 'OpenAI'.")
+            return self.client_registry.get(provider="openai")
+
+        return self.client_registry.get(provider=provider)
 
     @lru_cache(maxsize=1024)
     def _build_prompt(self, user_input: str, generated_text: str, reference_text: str) -> str:
@@ -135,7 +147,7 @@ class JudgeEvaluator(BaseEvaluator):
             generated_text=generated_data,
             reference_text=reference_data
         )
-        client = ClientRegistry.get(provider=provider)
+        client = self.select_client(provider=provider)
 
         try:
             response = client.call(message=prompt)
@@ -183,7 +195,7 @@ class JudgeEvaluator(BaseEvaluator):
             generated_text=generated_data,
             reference_text=reference_data
         )
-        client = ClientRegistry.get(provider=provider)
+        client = self.select_client(provider=provider)
 
         try:
             async for attempt in AsyncRetrying(
@@ -212,7 +224,11 @@ class JudgeEvaluator(BaseEvaluator):
 
 
 class MetadataEvaluator(BaseEvaluator):
-    def __init__(self):
+    def __init__(self, config: "WorkflowConfig | None"= None):
+        if config:
+            self.config = config
+            self.metics_map = config.evaluation.metrics_map
+
         self.data_loader = DataLoader()
         self.comparator = MetadataComparator()
         self.metrics_manager = MetricsManager()

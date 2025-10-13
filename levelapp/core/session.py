@@ -1,27 +1,23 @@
 """levelapp/core/session.py"""
 import threading
 
+from abc import ABC
+
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
 
 from datetime import datetime
 from humanize import precisedelta
 
-from levelapp.workflow import MainFactory
+from levelapp.workflow import MainFactory, WorkflowConfig
 from levelapp.workflow.base import BaseWorkflow
-from levelapp.workflow.schemas import WorkflowConfig, WorkflowContext
-from levelapp.aspects import FunctionMonitor, MetricType, ExecutionMetrics, MonitoringAspect, logger
+from levelapp.aspects import MetricType, ExecutionMetrics, MonitoringAspect, logger
+from levelapp.workflow.context import WorkflowContextBuilder
 
 
-@dataclass
-class SessionMetadata:
-    """Metadata for an evaluation session."""
-    session_name: str
-    started_at: datetime | None = None
-    ended_at: datetime | None = None
-    total_executions: int = 0
-    total_duration: float = 0.0
-    steps: Dict[str, 'StepMetadata'] = field(default_factory=dict)
+class TemporalStatusMixin(ABC):
+    started_at: datetime | None
+    ended_at: datetime | None
 
     @property
     def is_active(self) -> bool:
@@ -37,7 +33,18 @@ class SessionMetadata:
 
 
 @dataclass
-class StepMetadata:
+class SessionMetadata(TemporalStatusMixin):
+    """Metadata for an evaluation session."""
+    session_name: str
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    total_executions: int = 0
+    total_duration: float = 0.0
+    steps: Dict[str, 'StepMetadata'] = field(default_factory=dict)
+
+
+@dataclass
+class StepMetadata(TemporalStatusMixin):
     """Metadata for a specific step within an evaluation session."""
     step_name: str
     session_name: str
@@ -47,27 +54,21 @@ class StepMetadata:
     error_count: int = 0
     procedures_stats: List[ExecutionMetrics] | None = None
 
-    @property
-    def is_active(self) -> bool:
-        """Check if the step is currently active."""
-        return self.ended_at is None
-
-    @property
-    def duration(self) -> float | None:
-        """Calculate the duration of the step in seconds."""
-        if not self.is_active:
-            return (self.ended_at - self.started_at).total_seconds()
-        return None
-
 
 class StepContext:
     """Context manager for an evaluation step within an EvaluationSession."""
-    def __init__(self, session: "EvaluationSession", step_name: str, category: MetricType):
+    def __init__(
+            self,
+            session: "EvaluationSession",
+            step_name: str,
+            category: MetricType,
+    ):
         self.session = session
         self.step_name = step_name
         self.category = category
+
         self.step_meta: StepMetadata | None = None
-        self.full_step_name = f"{session.session_name}.{step_name}"
+        self.full_step_name = f"<{session.session_name}:{step_name}>"
         self._monitored_func = None
         self._func_gen = None
 
@@ -80,35 +81,49 @@ class StepContext:
             )
             self.session.session_metadata.steps[self.step_name] = self.step_meta
 
-        # Wrap with FunctionMonitor
-        self._monitored_func = self.session.monitor.monitor(
-            name=self.full_step_name,
-            category=self.category,
-            enable_timing=True,
-            track_memory=True,
-        )(self._step_wrapper)
+        if self.session.enable_monitoring:
+            # Wrap with FunctionMonitor
+            self._monitored_func = self.session.monitor.monitor(
+                name=self.full_step_name,
+                category=self.category,
+                enable_timing=True,
+                track_memory=True,
+            )(self._step_wrapper)
 
-        # Start monitoring
-        self._func_gen = self._monitored_func()
-        next(self._func_gen)  # Enter monitoring
+            # Start monitoring
+            try:
+                self._func_gen = self._monitored_func()
+                next(self._func_gen)  # Enter monitoring
+            except Exception as e:
+                logger.error(f"[StepContext] Failed to initialize monitoring for {self.full_step_name}:\n{e}")
+                raise
+
         return self  # returning self allows nested instrumentation
 
+    # noinspection PyMethodMayBeStatic
     def _step_wrapper(self):
         yield  # Actual user step execution happens here
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
-            next(self._func_gen)  # Exit monitoring
-        except StopIteration:
-            pass
+        if self.session.enable_monitoring:
+            try:
+                next(self._func_gen)  # Exit monitoring
+            except StopIteration:
+                pass
 
         with self.session.lock:
             self.step_meta.ended_at = datetime.now()
+
             if exc_type:
                 self.step_meta.error_count += 1
+
             self.session.session_metadata.total_executions += 1
+
             if self.step_meta.duration:
-                self.session.monitor.update_procedure_duration(name=self.full_step_name, value=self.step_meta.duration)
+                self.session.monitor.update_procedure_duration(
+                    name=self.full_step_name,
+                    value=self.step_meta.duration
+                )
                 self.session.session_metadata.total_duration += self.step_meta.duration
 
         return False
@@ -119,28 +134,29 @@ class EvaluationSession:
     def __init__(
             self,
             session_name: str = "test-session",
-            monitor: FunctionMonitor | None = None,
-            workflow_config: WorkflowConfig | None = None
+            workflow_config: WorkflowConfig | None = None,
+            enable_monitoring: bool = True,
     ):
         """
         Initialize Evaluation Session.
 
         Args:
             session_name (str): Name of the session
-            monitor (FunctionMonitor): Function monitoring aspect
             workflow_config (WorkflowConfig): Workflow configuration.
         """
         self._NAME = self.__class__.__name__
 
         self.session_name = session_name
-        self.monitor = monitor or MonitoringAspect
         self.workflow_config = workflow_config
-        self.workflow_type = workflow_config.workflow
+        self.enable_monitoring = enable_monitoring
 
         self.workflow: BaseWorkflow | None = None
 
         self.session_metadata = SessionMetadata(session_name=session_name)
+        self.monitor = MonitoringAspect if enable_monitoring else None
         self._lock = threading.RLock()
+
+        logger.info("[EvaluationSession] Evaluation session initialized.")
 
     @property
     def lock(self):
@@ -154,14 +170,10 @@ class EvaluationSession:
             if not self.workflow_config:
                 raise ValueError(f"{self._NAME}: Workflow configuration must be provided")
 
-            context = WorkflowContext(
-                config=self.workflow_config,
-                repository=MainFactory.create_repository(self.workflow_config),
-                evaluators=MainFactory.create_evaluator(self.workflow_config),
-                endpoint_config=self.workflow_config.endpoint_config,
-                inputs=self.workflow_config.inputs
-            )
-            self.workflow = MainFactory.create_workflow(self.workflow_type, context)
+            context_builder = WorkflowContextBuilder(self.workflow_config)
+            context = context_builder.build()
+
+            self.workflow = MainFactory.create_workflow(context=context)
 
         logger.info(
             f"[{self._NAME}] Starting evaluation session: {self.session_name}, "
