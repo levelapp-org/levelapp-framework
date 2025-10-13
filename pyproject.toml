@@ -1,10 +1,10 @@
 [project]
 name = "levelapp"
-version = "0.1.0"
+version = "0.1.1"
 description = "LevelApp is an evaluation framework for AI/LLM-based software application. [Powered by Norma]"
 readme = "README.md"
 authors = [
-    { name = "KadriSof", email = "kadrisofyen@gmail.com" }
+    { name = "Mohamed Sofiene KADRI", email = "ms.kadri.dev@gmail.com" }
 ]
 licence = { file = "LICENCE" }
 requires-python = ">=3.12"
