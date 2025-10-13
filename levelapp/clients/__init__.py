@@ -44,7 +44,7 @@ class ClientRegistry:
 
         cls._wrap_client_methods(client_class)
         cls._clients[provider] = client_class
-        logger.info(f"[ClientRegistry] Registered client for provider: {provider}")
+        logger.info(f"[ClientRegistry] Provider '{provider}' client registered.")
 
     @classmethod
     def _wrap_client_methods(cls, client_class: Type[BaseChatClient]) -> None:
