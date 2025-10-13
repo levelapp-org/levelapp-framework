@@ -8,7 +8,6 @@ from levelapp.workflow.runtime import WorkflowContext
 
 class MainFactory:
     """Central factory for workflows."""
-
     _workflow_map: Dict[WorkflowType, Callable[[WorkflowContext], BaseWorkflow]] = {
         WorkflowType.SIMULATOR: lambda ctx: SimulatorWorkflow(ctx),
         WorkflowType.COMPARATOR: lambda ctx: ComparatorWorkflow(ctx),
@@ -16,7 +15,15 @@ class MainFactory:
 
     @classmethod
     def create_workflow(cls, context: WorkflowContext) -> BaseWorkflow:
-        """Create workflow using the given runtime context."""
+        """
+        Create workflow using the given runtime context.
+
+        Args:
+            context (WorkflowContext): the provided workflow context.
+
+        Returns:
+            BaseWorkflow: the built workflow instance from the provided context.
+        """
         wf_type = context.config.process.workflow_type
         builder = cls._workflow_map.get(wf_type)
         if not builder:
@@ -25,5 +32,11 @@ class MainFactory:
 
     @classmethod
     def register_workflow(cls, wf_type: WorkflowType, builder: Callable[[WorkflowContext], BaseWorkflow]) -> None:
-        """Register a new workflow implementation."""
+        """
+        Register a new workflow implementation.
+
+        Args:
+            wf_type (WorkflowType): the workflow type.
+            builder (Callable[[WorkflowContext], BaseWorkflow]): the workflow builder.
+        """
         cls._workflow_map[wf_type] = builder
