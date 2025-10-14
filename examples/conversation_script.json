@@ -1,0 +1,38 @@
+{
+  "scripts": [
+    {
+      "interactions": [
+        {
+          "user_message": "Hello, book a doctor appointment.",
+          "reference_reply": "What type of doctor?",
+          "interaction_type": "initial",
+          "reference_metadata": {},
+          "guardrail_flag": false,
+          "request_payload": {"user_id": "123", "role": "user"}
+        },
+        {
+          "user_message": "Cardiologist.",
+          "reference_reply": "When?",
+          "interaction_type": "intermediate",
+          "reference_metadata": {"type": "Cardiology"},
+          "guardrail_flag": false,
+          "request_payload": {"user_id": "123", "role": "user"}
+        },
+        {
+          "user_message": "Next Monday at 10 AM.",
+          "reference_reply": "Booked for 10 AM next Monday.",
+          "interaction_type": "final",
+          "reference_metadata": {
+            "appointment_type": "Cardiology",
+            "date": "2025-10-20",
+            "time": "10:00"
+          },
+          "guardrail_flag": false,
+          "request_payload": {"user_id": "123", "role": "user"}
+        }
+      ],
+      "description": "Doctor booking flow",
+      "details": {"context": "Medical chatbot"}
+    }
+  ]
+}
