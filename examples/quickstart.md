@@ -86,7 +86,7 @@ Workflow Type: Set to `SIMULATOR` in YAML. This triggers dialogue simulation log
 Full list in docs: includes Token-based, Embedded (vector similarity), Fuzzy.
 <br>
 <br>
-* **Attempts and Batching**: evaluation_params.attempts runs simulations multiple times for averaging scores (useful for non-deterministic LLMs). batch_size controls concurrent requests to avoid rate limits.
+* **Attempts and Batching**: `evaluation_params` attempts runs simulations multiple times for averaging scores (useful for non-deterministic LLMs). batch_size controls concurrent requests to avoid rate limits.
 <br>
 <br>
 * **Placeholders in Payloads**: 
@@ -253,10 +253,10 @@ Use this to load configs, run the simulation, and collect results. LevelApp hand
 <br>
 Example run_simulation.py:
 ```Python
-import os
 from dotenv import load_dotenv
-from levelapp.workflow.schemas import WorkflowConfig
+from levelapp.workflow import WorkflowConfig
 from levelapp.core.session import EvaluationSession
+
 
 # Load .env (automatically done in LevelApp, but explicit for clarity)
 load_dotenv()
