@@ -1,7 +1,7 @@
 # Quickstart Guide: Using LevelApp's Conversation Simulator for Developers
 
 ---
-#### Welcome to LevelApp quickstart guide!
+#### Welcome to LevelApp Quickstart Guide!
 This guide provides a step-by-step walkthrough for developers to set up and use the Simulator Module in LevelApp.
 <br>
 <br>
@@ -121,13 +121,13 @@ evaluation:
 
 # REFERENCE DATA SECTION:
 reference_data:
-  path: "../data/conversation_script.json"  # Path to JSON script
+  path: "conversation_script.json"  # Path to JSON script
   data: {}  # Inline data if not using path (dict of scripts)
 
 # ENDPOINT CONFIGURATION SECTION:
 endpoint:
   base_url: "http://127.0.0.1:8000"  # Your chatbot's API base URL
-  url_path: "/chat"  # Endpoint path (full URL = base_url + url_path)
+  url_path: "chat"  # Endpoint path (full URL = base_url + url_path)
   api_key: ""  # Optional; overrides .env if set
   bearer_token: ""  # For auth
   model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"  # Model for your endpoint (if applicable).
@@ -295,9 +295,27 @@ Technical Execution Flow:
 4. `collect_results()`: Returns the evaluation results.
 5. `get_stats()`: Retrieves monitoring stats (API calls details, caching details, processing time, etc.).
 
-Run it:
+---
+### Let's Test It:
+First, install the packages required to run the examples test:
+<br>
+(it is always recommended to set up a virtual environment for testing)
 ```Bash
-  python run_simulation.py
+  pip install fastapi uvicorn levelapp
+```
+Second, run the chatbot (`example_chatbot.py`) using `uvicorn`:
+<br>
+(don't forget to add your `OPENAI_API_KEY`!)
+```Bash
+  uvicorn example_chatbot:app --reload --port 8000
+```
+Next, optionally, run a health test to see if the chatbot is alive:
+```Bash
+  curl http://localhost:8000/healthz
+```
+Finally, run the evaluation:
+```Bash
+  python example_evaluation.py
 ```
 
 That's it! All you need now is to verify and interpret the evaluation results.

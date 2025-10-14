@@ -1,13 +1,13 @@
 from dotenv import load_dotenv
-from levelapp.workflow.schemas import WorkflowConfig
 from levelapp.core.session import EvaluationSession
+from levelapp.workflow import WorkflowConfig
 
 # Load .env (automatically done in LevelApp, but explicit for clarity)
 load_dotenv()
 
 if __name__ == "__main__":
     # 1. Load YAML config
-    config = WorkflowConfig.load(path="workflow_config.yaml")
+    config = WorkflowConfig.load(path="workflow_configuration.yaml")
 
     # Alternatively: Load from dict for in-memory config (e.g., from DB)
     # config_dict = {...}  # As in README
