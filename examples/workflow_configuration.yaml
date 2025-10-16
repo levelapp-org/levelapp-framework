@@ -1,0 +1,38 @@
+process:
+  project_name: "chatbot-evaluation"
+  workflow_type: SIMULATOR  # Must be SIMULATOR for conversation testing
+  evaluation_params:
+    attempts: 3
+    batch_size: 10
+
+evaluation:
+  evaluators:
+    - JUDGE
+    - REFERENCE
+  providers:
+    - openai
+    - ionos
+  metrics_map:
+    appointment_type: EXACT
+    date: LEVENSHTEIN
+    time: TOKEN_BASED
+
+reference_data:
+  path: "conversation_script.json"
+  data: {}
+
+endpoint:
+  base_url: "http://127.0.0.1:8000"
+  url_path: "chat"
+  api_key: ""
+  bearer_token: ""
+  default_request_payload_template:
+    message: "${user_message}"
+  default_response_payload_template:
+    agent_reply: "${reply}"
+
+repository:
+  type: FIRESTORE # Keep this value as if for now.
+  project_id: ""
+  database_name: ""
+  source: "LOCAL"
