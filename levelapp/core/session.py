@@ -96,6 +96,7 @@ class StepContext:
                 category=self.category,
                 enable_timing=True,
                 track_memory=True,
+                verbose=self.session.verbose,
             )(self._step_wrapper)
 
             # Start monitoring
@@ -144,6 +145,7 @@ class EvaluationSession:
             session_name: str = "test-session",
             workflow_config: WorkflowConfig | None = None,
             enable_monitoring: bool = True,
+            verbose: bool = False
     ):
         """
         Initialize Evaluation Session.
@@ -151,12 +153,15 @@ class EvaluationSession:
         Args:
             session_name (str): Name of the session
             workflow_config (WorkflowConfig): Workflow configuration.
+            enable_monitoring (bool): Switch monitoring on. Defaults to True.
+            verbose (bool): Verbose mode. Defaults to False.
         """
         self._NAME = self.__class__.__name__
 
         self.session_name = session_name
         self.workflow_config = workflow_config
         self.enable_monitoring = enable_monitoring
+        self.verbose = verbose
 
         self.workflow: BaseWorkflow | None = None
 
