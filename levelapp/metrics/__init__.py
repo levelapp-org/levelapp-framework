@@ -1,13 +1,10 @@
 """levelapp/metrics/__init__.py"""
-import logging
-
 from typing import List, Dict, Type, Any
 
+from levelapp.aspects import logger
 from levelapp.core.base import BaseMetric
 from levelapp.metrics.exact import EXACT_METRICS
 from levelapp.metrics.fuzzy import FUZZY_METRICS
-
-logger = logging.getLogger(__name__)
 
 
 class MetricRegistry:
@@ -27,7 +24,7 @@ class MetricRegistry:
             raise KeyError(f"Metric '{name}' is already registered")
 
         cls._metrics[name] = metric_class
-        logger.info(f"Metric '{name}' registered successfully.")
+        logger.info(f"[MetricRegistry] Metric '{name}' registered.")
 
     @classmethod
     def get(cls, name: str, **kwargs: Any) -> BaseMetric:

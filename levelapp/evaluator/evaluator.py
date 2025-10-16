@@ -71,7 +71,14 @@ class JudgeEvaluationResults(BaseModel):
 
 
 class JudgeEvaluator(BaseEvaluator):
+    """LLM-as-a-judge evaluator class"""
     def __init__(self, config: "WorkflowConfig | None" = None):
+        """
+        Initialize the JudgeEvaluator.
+
+        Args:
+            config (WorkflowConfig | None): The configuration of the workflow.
+        """
         if config:
             self.config = config
             self.providers = config.evaluation.providers
@@ -206,7 +213,6 @@ class JudgeEvaluator(BaseEvaluator):
             ):
                 with attempt:
                     response = await client.acall(message=prompt)
-                    logger.info(f"[{provider}] Async evaluation:\n{response}\n{'---' * 10}")
                     parsed = client.parse_response(response=response)
                     return JudgeEvaluationResults.from_parsed(provider=provider, parsed=parsed, raw=response)
 
@@ -224,7 +230,14 @@ class JudgeEvaluator(BaseEvaluator):
 
 
 class MetadataEvaluator(BaseEvaluator):
-    def __init__(self, config: "WorkflowConfig | None"= None):
+    """Metadata evaluator class."""
+    def __init__(self, config: "WorkflowConfig | None" = None):
+        """
+        Initialize the MetadataEvaluator.
+
+        Args:
+            config (WorkflowConfig | None): The workflow configuration.
+        """
         if config:
             self.config = config
             self.metics_map = config.evaluation.metrics_map
@@ -261,7 +274,6 @@ class MetadataEvaluator(BaseEvaluator):
         self.comparator.reference_data = ref_data
 
         output = self.comparator.run(indexed_mode=False)
-        logger.info(f"Comparison results:\n{output}\n---")
         results: Dict[str, float] = {}
 
         for k, v in output.items():
