@@ -78,7 +78,6 @@ class MetricsManager:
             ValueError: if the scorer is not a callable.
         """
         self._scorers[name] = scorer
-        logger.info(f"[MetricsManager] Registered scorer: {name}")
 
     def get_scorer(self, name: str) -> Callable:
         """
@@ -95,7 +94,6 @@ class MetricsManager:
         """
         try:
             scorer = self._scorers.get(name)
-            logger.info(f"[get_scorer] Retrieved scorer: {name}")
             return scorer
 
         except KeyError:
