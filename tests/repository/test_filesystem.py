@@ -53,7 +53,7 @@ def test_query_collection(temp_repo):
     models = [
         MockModel(id="1", name="alpha", value=10),
         MockModel(id="2", name="beta", value=20),
-        MockModel(id="3", name="gamma", value=30),
+        MockModel(id="3", name="alpha", value=30),
     ]
 
     for m in models:

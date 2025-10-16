@@ -125,7 +125,7 @@ class FileSystemRepository(BaseRepository):
 
         try:
             with path.open("w", encoding="utf-8") as f:
-                json.dump(data.model_dump_json(), f, ensure_ascii=False, indent=2)
+                json.dump(data.model_dump(), f, ensure_ascii=False, indent=2)
             logger.info(f"[{self._CLASS_NAME}] Stored document '{document_id}' in '{path}'")
 
         except Exception as e:
