@@ -24,7 +24,6 @@ class MetricRegistry:
             raise KeyError(f"Metric '{name}' is already registered")
 
         cls._metrics[name] = metric_class
-        logger.info(f"[MetricRegistry] Metric '{name}' registered.")
 
     @classmethod
     def get(cls, name: str, **kwargs: Any) -> BaseMetric:

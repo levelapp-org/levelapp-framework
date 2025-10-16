@@ -1,5 +1,6 @@
 # Quickstart Guide: Using LevelApp's Conversation Simulator for Developers
 
+---
 #### Welcome to LevelApp Quickstart Guide!
 This guide provides a step-by-step walkthrough for developers to set up and use the Simulator Module in LevelApp.
 <br>
@@ -14,7 +15,6 @@ It leverages LLM-as-a-judge for qualitative scoring and supports quantitative me
     <figcaption>Fig.1 - Simulator Module Diagram</figcaption>
 </figure>
 <br>
-<br>
 We'll emphasize technical details, including configuration schemas, placeholders, evaluators, metrics, and code execution flow. This assumes you're familiar with Python, YAML/JSON, and REST APIs for LLM endpoints. By the end, you'll have a runnable example for evaluating a chatbot's conversation flow.
 
 ---
@@ -26,7 +26,6 @@ The evaluation of dialogue systems is very cost/time intensive and problematic s
 
 Automating the evaluation and introducing an LLM-as-a-judge as an approach to evaluate the correctness of responses can
 ease the process and render it more efficient.
-
 ---
 ## Walkthrough
 ### Step1: Installation and Prerequisites

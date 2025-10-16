@@ -343,6 +343,7 @@ class FunctionMonitor:
             category: MetricType,
             enable_timing: bool,
             track_memory: bool,
+            verbose=False
     ) -> Callable[P, T]:
         """
         Wrap function execution with timing and error handling.
@@ -352,6 +353,7 @@ class FunctionMonitor:
             name: Unique identifier for the function
             enable_timing: Enable execution time logging
             track_memory: Enable memory tracking
+            verbose: Enable verbose logging
 
         Returns:
             Wrapped function
@@ -402,7 +404,7 @@ class FunctionMonitor:
 
                     self._aggregated_stats[name].update(metrics=metrics)
 
-                if enable_timing and metrics.duration is not None:
+                if verbose and enable_timing and metrics.duration is not None:
                     log_message = f"[FunctionMonitor] Executed '{name}' in {metrics.duration:.4f}s"
                     if metrics.cache_hit:
                         log_message += " (cache hit)"
