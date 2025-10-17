@@ -1,6 +1,7 @@
 """levelapp/workflow/context.py: Builds runtime WorkflowContext from WorkflowConfig."""
 from typing import Dict, Callable
 
+from levelapp.repository.filesystem import FileSystemRepository
 from levelapp.workflow.config import WorkflowConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.runtime import WorkflowContext
@@ -19,6 +20,7 @@ class WorkflowContextBuilder:
         # Map repository type to constructor that accepts the WorkflowConfig
         self.repository_map: Dict[RepositoryType, Callable[[WorkflowConfig], BaseRepository]] = {
             RepositoryType.FIRESTORE: lambda cfg: FirestoreRepository(cfg),
+            RepositoryType.FILESYSTEM: lambda cfg: FileSystemRepository(cfg),
         }
 
         # Map evaluator type to constructor that accepts the WorkflowConfig
