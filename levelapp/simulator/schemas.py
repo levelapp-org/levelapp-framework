@@ -64,8 +64,6 @@ class InteractionEvaluationResults(BaseModel):
 
 
 class SimulationResults(BaseModel):
-    # Initial data
-    batch_id: str = Field(default_factory=uuid4, description="Batch identifier")
     # Collected data
     started_at: datetime = datetime.now()
     finished_at: datetime

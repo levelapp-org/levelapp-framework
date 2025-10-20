@@ -55,6 +55,7 @@ def extract_interaction_details(
 
         raw_value = output.get("generated_metadata", {})
         output["generated_metadata"] = ast.literal_eval(raw_value) if isinstance(raw_value, str) else raw_value
+
         return InteractionResults.model_validate(output)
 
     except json.JSONDecodeError as e:

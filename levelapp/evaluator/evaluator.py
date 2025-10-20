@@ -41,7 +41,7 @@ class JudgeEvaluationResults(BaseModel):
     label: str = Field(..., description="The label of the evaluation result")
     justification: str = Field(..., description="Short explanation of the evaluation result")
     evidence: Evidence = Field(default_factory=Evidence, description="Detailed evidence for the evaluation")
-    raw_response: Dict[str, Any] = Field(..., description="Full unprocessed API response")
+    raw_response: Dict[str, Any] = Field(..., description="Full unprocessed API response", exclude=True)
     metadata: Dict[str, Any] = Field(..., description="Metadata about the evaluation result")
 
     @classmethod

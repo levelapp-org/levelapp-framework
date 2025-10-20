@@ -1,6 +1,7 @@
 """
 'simulators/service.py': Service layer to manage conversation simulation and evaluation.
 """
+import json
 import time
 import asyncio
 
@@ -112,7 +113,7 @@ class ConversationSimulator(BaseProcess):
         self,
         test_batch: ScriptsBatch,
         attempts: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
         Run a batch test for the given batch name and details.
 
@@ -141,7 +142,7 @@ class ConversationSimulator(BaseProcess):
             interaction_results=results.get("results")
         )
 
-        return {"results": results.model_dump(), "status": "COMPLETE"}
+        return results.model_dump_json(indent=2)
 
     async def simulate_conversation(self, attempts: int = 1) -> Dict[str, Any]:
         """
