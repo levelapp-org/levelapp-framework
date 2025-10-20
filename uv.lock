@@ -340,17 +340,15 @@ wheels = [
 
 [[package]]
 name = "levelapp"
-version = "0.1.1"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
-    { name = "arrow" },
     { name = "google-api-core" },
     { name = "google-auth" },
     { name = "google-cloud-firestore" },
     { name = "httpx" },
     { name = "humanize" },
     { name = "numpy" },
-    { name = "openai" },
     { name = "pandas" },
     { name = "pandas-stubs" },
     { name = "pydantic" },
@@ -381,7 +379,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arrow", specifier = ">=1.3.0" },
     { name = "arrow", marker = "extra == 'dev'", specifier = ">=1.3.0" },
     { name = "google-api-core", specifier = ">=2.25.1" },
     { name = "google-auth", specifier = ">=2.40.3" },
@@ -391,7 +388,6 @@ requires-dist = [
     { name = "humanize", specifier = ">=4.13.0" },
     { name = "numpy", specifier = ">=2.3.2" },
     { name = "numpy", marker = "extra == 'dev'", specifier = ">=2.3.2" },
-    { name = "openai", specifier = ">=1.99.9" },
     { name = "openai", marker = "extra == 'dev'", specifier = ">=1.99.9" },
     { name = "pandas", specifier = ">=2.3.1" },
     { name = "pandas", marker = "extra == 'dev'", specifier = ">=2.3.1" },

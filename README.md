@@ -81,7 +81,7 @@ endpoint:
     generated_metadata: "${generated_metadata}"
 
 repository:
-  type: FIRESTORE # Pick one of the following: FIRESTORE, FILESYSTEM, MONGODB.
+  type: FIRESTORE # Pick one of the following: FIRESTORE, FILESYSTEM
   project_id: "(default)"
   database_name: ""
 ```
@@ -168,14 +168,14 @@ To run an evaluation:
 
 ```python
 if __name__ == "__main__":
-    from levelapp.workflow.schemas import WorkflowConfig
+    from levelapp.workflow import WorkflowConfig
     from levelapp.core.session import EvaluationSession
 
     # Load configuration from YAML
     config = WorkflowConfig.load(path="../data/workflow_config.yaml")
 
-    # Run evaluation session
-    with EvaluationSession(session_name="test-session-1", workflow_config=config) as session:
+    # Run evaluation session (You can enable/disable the monitoring aspect)
+    with EvaluationSession(session_name="test-session-1", workflow_config=config, enable_monitoring=False) as session:
         session.run()
         results = session.workflow.collect_results()
         print("Results:", results)
@@ -191,14 +191,13 @@ if __name__ == "__main__":
     from levelapp.workflow import WorkflowConfig
     from levelapp.core.session import EvaluationSession
 
-    # Firestore -> retrieve endpoint config -> data => config_dict
-
+    
     config_dict = {
         "process": {"project_name": "test-project", "workflow_type": "SIMULATOR", "evaluation_params": {"attempts": 2}},
-        "evaluation": {"evaluators": ["JUDGE"], "providers": ["openai", "ionos"]},
+        "evaluation": {"evaluators": ["JUDGE", "REFERENCE"], "providers": ["openai", "ionos"], "metrics_map": {"field_1": "EXACT"}},
         "reference_data": {"path": "", "data": {}},
         "endpoint": {"base_url": "http://127.0.0.1:8000", "api_key": "key", "model_id": "model"},
-        "repository": {"type": "FIRESTORE", "source": "IN_MEMORY", "metrics_map": {"field_1": "EXACT"}},
+        "repository": {"type": "FIRESTORE", "source": "IN_MEMORY"},
     }
 
     content = {
