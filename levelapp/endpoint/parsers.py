@@ -1,4 +1,4 @@
-"""levelapp/endpoint/tools.py"""
+"""levelapp/endpoint/parsers.py"""
 from typing import List, Dict, Any
 
 from levelapp.config.endpoint_ import ResponseMappingConfig
@@ -90,7 +90,7 @@ class ResponseDataExtractor:
         return result
 
     @staticmethod
-    def _extract_by_path(obj: Any, path: str) -> Any:
+    def _extract_by_path(obj: Dict, path: str) -> Any:
         """
         Extracts value using JSON path-like notation.
         """
@@ -98,11 +98,20 @@ class ResponseDataExtractor:
         current = obj
 
         for part in parts:
-            if '[' in part and ']' in part:
-                key, idx = part.split('[')
-                idx = int(idx.rstrip(']'))
-                current = current[key][idx] if key else current[idx]
-            else:
-                current = current[part]
+            if not isinstance(current, dict):
+                print(f"[extract_by_path][WARNING] the response data is not a dict.")
+                return None
+
+            try:
+                if '[' in part and ']' in part:
+                    key, idx = part.split('[')
+                    idx = int(idx.rstrip(']'))
+                    current = current[key][idx] if key else current[idx]
+                else:
+                    current = current.get(part)
+
+            except (KeyError, IndexError, TypeError, AttributeError) as e:
+                print(f"[extract_by_path][ERROR] Error type <{e.__class__.__name__}> : {e.args[0]}")
+                return "N/A"
 
         return current
