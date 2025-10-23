@@ -1,11 +1,11 @@
 """levelapp/endpoint/client.py"""
+import os
+import httpx
 import asyncio
 import logging
-import os
+
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
-
-import httpx
 from pydantic import BaseModel, Field
 
 from levelapp.endpoint.schemas import HttpMethod, HeaderConfig, RequestSchemaConfig, ResponseMappingConfig
@@ -20,7 +20,7 @@ class EndpointConfig(BaseModel):
     headers: List[HeaderConfig] = Field(default_factory=list)
     request_schema: List[RequestSchemaConfig] = Field(default_factory=list)
     response_mapping: List[ResponseMappingConfig] = Field(default_factory=list)
-    timout: int = Field(default=30)
+    timeout: int = Field(default=30)
     retry_count: int = Field(default=3)
     retry_backoff: float = Field(default=1.0)
 
@@ -42,7 +42,7 @@ class APIClient:
         self.logger = logging.getLogger(f"AsyncAPIClient.{self.config.name}")
         self.client = httpx.AsyncClient(
             base_url=self.config.base_url,
-            timeout=self.config.timout,
+            timeout=self.config.timeout,
             follow_redirects=True
         )
 
@@ -52,16 +52,17 @@ class APIClient:
     async def __aexit__(self, *args) -> None:
         await self.client.aclose()
 
-    async def _build_headers(self) -> Dict[str, str]:
+    def _build_headers(self) -> Dict[str, str]:
+        """Build headers with secure value resolution."""
         headers = {}
+
         for header in self.config.headers:
             if header.secure:
                 value = os.getenv(header.value)
                 if value is None:
-                    self.logger.warning(f"Secure header '{header.name}' en var '{header.value}' not found.")
+                    self.logger.warning(f"Secure header '{header.name}' env var '{header.value}' not found")
                     continue
                 headers[header.name] = value
-
             else:
                 headers[header.name] = header.value
 
@@ -73,13 +74,13 @@ class APIClient:
             query_params: Dict[str, Any] | None = None,
     ) -> httpx.Response:
         """Execute asynchronous REST API request with retry logic."""
-        headers = await self._build_headers()
+        headers = self._build_headers()
 
         for attempt in range(self.config.retry_count):
             try:
                 response = await self.client.request(
                     method=self.config.method.value,
-                    url=self.config.base_url,
+                    url=self.config.path,
                     json=payload,
                     params=query_params,
                     headers=headers,
@@ -89,7 +90,7 @@ class APIClient:
 
             except httpx.HTTPStatusError as e:
                 self.logger.error(f"HTTP {e.response.status_code}: {e}")
-                if attempt == self.config.retry_count:
+                if attempt == self.config.retry_count - 1:
                     raise
 
             except httpx.RequestError as e:
