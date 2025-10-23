@@ -80,8 +80,8 @@ class ResponseDataExtractor:
 
         for mapping in mappings:
             try:
-                value = self._extract_by_path(obj=response_data, path=mapping.field_path)
-                result[mapping.extract_as] = value if value is not None else mapping.default
+                value = self._extract_by_path(obj=response_data, path=mapping.field_path, default=mapping.default)
+                result[mapping.extract_as] = value
 
             except Exception as e:
                 print(f"Failed to extract '{mapping.field_path}':\n{e}")
@@ -90,7 +90,7 @@ class ResponseDataExtractor:
         return result
 
     @staticmethod
-    def _extract_by_path(obj: Dict, path: str) -> Any:
+    def _extract_by_path(obj: Dict, path: str, default: Any = "N/A") -> Any:
         """
         Extracts value using JSON path-like notation.
         """
@@ -99,8 +99,8 @@ class ResponseDataExtractor:
 
         for part in parts:
             if not isinstance(current, dict):
-                print(f"[extract_by_path][WARNING] the response data is not a dict.")
-                return None
+                print("[extract_by_path][WARNING] the response data is not a dict.")
+                return default
 
             try:
                 if '[' in part and ']' in part:
@@ -108,10 +108,13 @@ class ResponseDataExtractor:
                     idx = int(idx.rstrip(']'))
                     current = current[key][idx] if key else current[idx]
                 else:
+                    if part not in current:
+                        print(f"[extract_by_path][WARNING] Key '{part}' is missing from response.")
+                        return default
                     current = current.get(part)
 
             except (KeyError, IndexError, TypeError, AttributeError) as e:
                 print(f"[extract_by_path][ERROR] Error type <{e.__class__.__name__}> : {e.args[0]}")
-                return "N/A"
+                return default
 
         return current
