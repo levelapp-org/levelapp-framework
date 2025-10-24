@@ -422,7 +422,8 @@ class FunctionMonitor:
             maxsize: int | None = 128,
             enable_timing: bool = True,
             track_memory: bool = True,
-            collectors: List[Type[MetricsCollector]] | None = None
+            collectors: List[Type[MetricsCollector]] | None = None,
+            verbose: bool = False
     ) -> Callable[[Callable[P, T]], Callable[P, T]]:
         """
         Decorator factory for monitoring functions.
@@ -456,7 +457,7 @@ class FunctionMonitor:
             )
 
             with self._lock:
-                if name in self._monitored_procedures:
+                if name in self._monitored_procedures and verbose:
                     raise ValueError(f"Function '{name}' is already registered.")
 
                 self._monitored_procedures[name] = monitored_func

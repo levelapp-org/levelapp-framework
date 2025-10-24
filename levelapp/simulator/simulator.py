@@ -396,7 +396,7 @@ class ConversationSimulator(BaseProcess):
                 evaluation_results=evaluation_results,
             )
         else:
-            logger.info(f"[{_LOG}] Judge evaluation skipped (no evaluator or no providers).")
+            logger.info(f"{_LOG} Judge evaluation skipped (no evaluator or no providers).")
 
         if metadata_evaluator and reference_metadata:
             self._metadata_evaluation(
@@ -406,7 +406,7 @@ class ConversationSimulator(BaseProcess):
                 evaluation_results=evaluation_results,
             )
         else:
-            logger.info(f"[{_LOG}] Metadata evaluation skipped (no evaluator or no reference metadata).")
+            logger.info(f"{_LOG} Metadata evaluation skipped (no evaluator or no reference metadata).")
 
         evaluation_results.guardrail_flag = 1 if generated_guardrail == reference_guardrail else 0
 
@@ -480,7 +480,7 @@ class ConversationSimulator(BaseProcess):
                 reference_data=reference_metadata,
             )
         except Exception as e:
-            logger.error(f"[{_LOG}] Metadata evaluation failed:\n{e}", exc_info=e)
+            logger.error(f"{_LOG} Metadata evaluation failed:\n{e}", exc_info=e)
 
     @staticmethod
     def store_evaluation_results(
