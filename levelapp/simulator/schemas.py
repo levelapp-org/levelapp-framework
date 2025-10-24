@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 
 from typing import Dict, Any, List
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from levelapp.evaluator.evaluator import JudgeEvaluationResults
 
@@ -64,16 +64,18 @@ class InteractionEvaluationResults(BaseModel):
 
 
 class SimulationResults(BaseModel):
-    # Initial data
-    project_id: str = Field(default_factory=uuid4, description="Project identifier")
-    user_id: str = Field(default_factory=uuid4, description="User identifier")
-    batch_id: str = Field(default_factory=uuid4, description="Batch identifier")
     # Collected data
     started_at: datetime = datetime.now()
     finished_at: datetime
     # Collected Results
     evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
     average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
+    interaction_results: List[Dict[str, Any]] | None = Field(default_factory=list, description="detailed results")
+
+    @computed_field
+    @property
+    def batch_id(self) -> str:
+        return str(uuid4())
 
     @computed_field
     @property

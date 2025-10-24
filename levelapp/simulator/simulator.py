@@ -1,6 +1,7 @@
 """
 'simulators/service.py': Service layer to manage conversation simulation and evaluation.
 """
+import json
 import time
 import asyncio
 
@@ -112,7 +113,7 @@ class ConversationSimulator(BaseProcess):
         self,
         test_batch: ScriptsBatch,
         attempts: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
         Run a batch test for the given batch name and details.
 
@@ -138,9 +139,10 @@ class ConversationSimulator(BaseProcess):
             finished_at=finished_at,
             evaluation_summary=self.verdict_summaries,
             average_scores=results.get("average_scores", {}),
+            interaction_results=results.get("results")
         )
 
-        return {"results": results, "status": "COMPLETE"}
+        return results.model_dump_json(indent=2)
 
     async def simulate_conversation(self, attempts: int = 1) -> Dict[str, Any]:
         """
@@ -180,7 +182,7 @@ class ConversationSimulator(BaseProcess):
                 verdicts=verdicts, judge=judge
             )
 
-        return {"scripts": results, "average_scores": overall_average_scores}
+        return {"results": results, "average_scores": overall_average_scores}
 
     async def simulate_single_scenario(
         self, script: ConversationScript,
@@ -209,7 +211,7 @@ class ConversationSimulator(BaseProcess):
             collected_scores: Dict[str, List[Any]] = defaultdict(list)
             collected_verdicts: Dict[str, List[str]] = defaultdict(list)
 
-            initial_interaction_results = await self.simulate_interactions(
+            interaction_results = await self.simulate_interactions(
                 script=script,
                 evaluation_verdicts=collected_verdicts,
                 collected_scores=collected_scores,
@@ -234,7 +236,7 @@ class ConversationSimulator(BaseProcess):
                 "attempt": attempt_number + 1,
                 "script_id": script.id,
                 "total_duration": elapsed_time,
-                "interaction_results": initial_interaction_results,
+                "interaction_results": interaction_results,
                 "evaluation_verdicts": collected_verdicts,
                 "average_scores": single_attempt_scores,
             }

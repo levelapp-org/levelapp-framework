@@ -1,11 +1,12 @@
 """
 'simulators/aspects.py': Utility functions for handling VLA interactions and requests.
 """
+import ast
 import json
-
 import httpx
 
 from uuid import UUID
+from string import Template
 from typing import Any, Dict, List, Union
 
 from pydantic import ValidationError
@@ -48,7 +49,14 @@ def extract_interaction_details(
             missing_keys = required_keys - response_dict.keys()
             logger.warning(f"[extract_interaction_details] Missing data: {missing_keys}]")
 
-        return InteractionResults.model_validate(response_dict)
+        output = {}
+        for k, v in template.items():
+            output[k] = Template(v).safe_substitute(response_dict)
+
+        raw_value = output.get("generated_metadata", {})
+        output["generated_metadata"] = ast.literal_eval(raw_value) if isinstance(raw_value, str) else raw_value
+
+        return InteractionResults.model_validate(output)
 
     except json.JSONDecodeError as e:
         logger.error(f"[extract_interaction_details] Failed to extract details:\n{e}")
@@ -142,3 +150,14 @@ def summarize_verdicts(
     except Exception as e:
         logger.error(f"[summarize_justifications] Error during summarization: {str(e)}", exc_info=True)
         return []
+
+
+# if __name__ == '__main__':
+#     template = {'generated_reply': '${agent_reply}', 'generated_metadata': '${generated_metadata}'}
+#     response_dict = {
+#         'agent_reply': "I'd be happy to help you book something for 10 AM.",
+#         'generated_metadata': {'appointment_type': 'Cardiology', 'date': 'next Monday', 'time': '10 AM'}
+#     }
+#
+#     result = extract_interaction_details(response_dict, template)
+#     print(f"result: {result.model_dump()}")
