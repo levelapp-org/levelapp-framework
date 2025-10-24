@@ -34,7 +34,7 @@ class ConnectivityTester:
             response_data = response.json() if response.text else {}
             extracted = self.response_extractor.extract(
                 response_data=response_data,
-                mappings=self.config.mappings,
+                mappings=self.config.response_mapping,
             )
 
             return {

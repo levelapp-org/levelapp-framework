@@ -33,7 +33,7 @@ class ConfigurationManager:
 
         except Exception as e:
             self.logger.error(f"Failed to load endpoint config: {e}", exc_info=e)
-            raise
+            raise RuntimeError("Failed to extract endpoints data from YAML file:\n{e}")
 
     def build_response_mapping(self, content: List[Dict[str, Any]]) -> List[ResponseMappingConfig]:
         mappings = []
@@ -61,13 +61,17 @@ class ConfigurationManager:
             schema=self.endpoints[endpoint_name].request_schema,
             context=context
         )
-        response = await client.execute(payload=payload)
+
+        async with client:
+            response = await client.execute(payload=payload)
+
         self.logger.info(f"Response status: {response.status_code}")
         response_data = response.json() if response.text else {}
         extracted = extractor.extract(
             response_data=response_data,
             mappings=mappings
         )
+
         return extracted
 
     def get_tester(self, endpoint_name: str) -> ConnectivityTester:
