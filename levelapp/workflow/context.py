@@ -59,6 +59,6 @@ class WorkflowContextBuilder:
             repository=repository,
             evaluators=evaluators,
             providers=providers,
-            endpoint_config=endpoint_config,
+            endpoint=endpoint_config,
             inputs=inputs,
         )

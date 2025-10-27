@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
 from levelapp.aspects import logger
-from levelapp.config.endpoint import EndpointConfig
+from levelapp.endpoint.client import EndpointConfig
 from levelapp.core.schemas import WorkflowType, RepositoryType, EvaluatorType
 
 
@@ -39,9 +39,9 @@ class WorkflowConfig(BaseModel):
     Supports both file-based loading and in-memory dictionary creation.
     """
     process: ProcessConfig
+    endpoint: EndpointConfig
     evaluation: EvaluationConfig
     reference_data: ReferenceDataConfig
-    endpoint: EndpointConfig
     repository: RepositoryConfig
 
     class Config:
@@ -90,3 +90,7 @@ class WorkflowConfig(BaseModel):
         self.reference_data.data = content
         logger.info(f"[{self.__class__.__name__}] Reference data loaded from provided content")
 
+
+if __name__ == '__main__':
+    workflow_config = WorkflowConfig.load(path="../../src/data/workflow_config.yaml")
+    print(f"Workflow Configuration:\n{workflow_config.model_dump_json(indent=2)}")
