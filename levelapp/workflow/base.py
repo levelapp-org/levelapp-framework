@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from levelapp.core.base import BaseProcess
+from levelapp.endpoint.client import EndpointConfig
 from levelapp.endpoint.manager import EndpointConfigManager
 from levelapp.simulator.schemas import ScriptsBatch
 from levelapp.simulator.simulator import ConversationSimulator
@@ -118,13 +119,23 @@ class SimulatorWorkflow(BaseWorkflow):
         """
         simulator = ConversationSimulator()
         simulator.setup(
+            endpoint_config=context.endpoint,
             evaluators=context.evaluators,
             providers=context.providers,
-            endpoint_config=context.endpoint,
         )
+
         return simulator
 
     async def test_connection(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Runs a connectivity test of the configured endpoint.
+
+        Args:
+            context (Dict[str, Any]): The request payload to send for testing.
+
+        Returns:
+            The test connectivity result.
+        """
         endpoint_cm = EndpointConfigManager()
         endpoint_cm.set_endpoints(endpoints_config=[self.context.endpoint])
         tester = endpoint_cm.get_tester(endpoint_name=self.context.endpoint.name)

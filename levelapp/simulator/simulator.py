@@ -13,6 +13,8 @@ from typing import Dict, Any, List
 from levelapp.core.base import BaseProcess, BaseEvaluator
 from levelapp.endpoint.client import EndpointConfig
 from levelapp.endpoint.manager import EndpointConfigManager
+
+from levelapp.core.schemas import EvaluatorType
 from levelapp.simulator.schemas import (
     InteractionEvaluationResults,
     ScriptsBatch,
@@ -26,7 +28,6 @@ from levelapp.simulator.utils import (
     summarize_verdicts,
 )
 from levelapp.aspects import logger
-from levelapp.core.schemas import EvaluatorType
 
 
 class ConversationSimulator(BaseProcess):
@@ -34,7 +35,7 @@ class ConversationSimulator(BaseProcess):
 
     def __init__(
         self,
-        endpoint_cm: EndpointConfigManager | None = None,
+        endpoint_config: EndpointConfig | None = None,
         evaluators: Dict[EvaluatorType, BaseEvaluator] | None = None,
         providers: List[str] | None = None,
 
@@ -43,15 +44,17 @@ class ConversationSimulator(BaseProcess):
         Initialize the ConversationSimulator.
 
         Args:
-            endpoint_cm (EndpointConfigManager): Endpoint configuration manager.
+            endpoint_config (EndpointConfig): Endpoint configuration.
             evaluators (EvaluationService): Service for evaluating interactions.
-            endpoint_cm (EndpointConfig): Configuration object for VLA.
+            endpoint_config (EndpointConfig): Configuration object for VLA.
         """
         self._CLASS_NAME = self.__class__.__name__
 
+        self.endpoint_config = endpoint_config
         self.evaluators = evaluators
         self.providers = providers
-        self.endpoint_cm = endpoint_cm
+
+        self.endpoint_cm = EndpointConfigManager()
 
         self.test_batch: ScriptsBatch | None = None
         self.evaluation_verdicts: Dict[str, List[str]] = defaultdict(list)
@@ -59,9 +62,9 @@ class ConversationSimulator(BaseProcess):
 
     def setup(
             self,
+            endpoint_config: EndpointConfig,
             evaluators: Dict[EvaluatorType, BaseEvaluator],
             providers: List[str],
-            endpoint_config: EndpointConfig,
     ) -> None:
         """
         Initialize the ConversationSimulator.
@@ -75,8 +78,10 @@ class ConversationSimulator(BaseProcess):
         _LOG: str = f"[{self._CLASS_NAME}][{self.setup.__name__}]"
         logger.info(f"{_LOG} Setting up the Conversation Simulator..")
 
+        if not self.endpoint_cm:
+            self.endpoint_cm = EndpointConfigManager()
+
         self.endpoint_config = endpoint_config
-        self.endpoint_cm = EndpointConfigManager()
         self.endpoint_cm.set_endpoints(endpoints_config=[endpoint_config])
 
         self.evaluators = evaluators
@@ -276,21 +281,8 @@ class ConversationSimulator(BaseProcess):
         for interaction in interactions:
             user_message = interaction.user_message
             request_payload = interaction.request_payload
-            # self.endpoint_config.variables = {
-            #     "user_message": user_message,
-            #     "request_payload": request_payload
-            # }
-            #
-            # response = await async_interaction_request(
-            #     url=self.endpoint_config.full_url,
-            #     headers=self.endpoint_config.headers,
-            #     payload=self.endpoint_config.request_payload,
-            # )
 
-            request_payload = {
-                "conversation_id": str(uuid.uuid4()),
-                "user_message": user_message,
-            }
+            request_payload.update({"user_message": user_message})
 
             mappings = self.endpoint_cm.build_response_mapping(
                 [
@@ -304,6 +296,8 @@ class ConversationSimulator(BaseProcess):
                 endpoint_config=self.endpoint_config,
                 context=request_payload,
             )
+
+            logger.info(f"{_LOG} Response:\n{response}\n---")
 
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata
@@ -323,23 +317,18 @@ class ConversationSimulator(BaseProcess):
                 results.append(result)
                 continue
 
-            # interaction_details = extract_interaction_details(
-            #     response=response.text,
-            #     template=self.endpoint_config.response_payload,
-            # )
-            #
-            # generated_reply = interaction_details.generated_reply
-            # generated_metadata = interaction_details.generated_metadata
-            # extracted_guardrail_flag: bool = interaction_details.guardrail_flag
-
             interaction_details = self.endpoint_cm.extract_response_data(
                 response=response,
                 mappings=mappings,
             )
 
+            logger.info(f"{_LOG} Interaction details:\n{interaction_details}\n---")
+
             generated_reply = interaction_details.get("agent_reply", "")
             generated_metadata = interaction_details.get("metadata", {})
             extracted_guardrail_flag = interaction_details.get("guardrail_flag", False)
+
+            logger.info(f"{_LOG} Generated reply:\n{generated_reply}\n---")
 
             evaluation_results = await self.evaluate_interaction(
                 user_input=user_message,
