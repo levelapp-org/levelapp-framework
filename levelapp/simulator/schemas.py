@@ -30,7 +30,7 @@ class Interaction(BaseModel):
     interaction_type: InteractionLevel = Field(default=InteractionLevel.INITIAL, description="Type of interaction")
     reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
     # generated_metadata: Dict[str, Any] = Field(default_factory=dict, description="Extracted metadata")
-    guardrail_flag: bool = Field(default=False, description="Flag for guardrail signaling")
+    guardrail_flag: Any = Field(default=False, description="Flag for guardrail signaling")
     request_payload: Dict[str, Any] = Field(default_factory=dict, description="Additional request payload")
 
 
@@ -40,6 +40,7 @@ class ConversationScript(BaseModel):
     interactions: List[Interaction] = Field(default_factory=list, description="List of interactions")
     description: str = Field(default="no-description", description="A short description of the conversation")
     details: Dict[str, str] = Field(default_factory=dict, description="Conversation details")
+    dynamic_requests_schema: bool = Field(default=False, description="Whether the payload request schema is dynamic")
 
 
 class ScriptsBatch(BaseModel):

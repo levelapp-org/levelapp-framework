@@ -1,7 +1,6 @@
 """
 'simulators/service.py': Service layer to manage conversation simulation and evaluation.
 """
-import uuid
 import time
 import asyncio
 
@@ -22,8 +21,6 @@ from levelapp.simulator.schemas import (
     SimulationResults
 )
 from levelapp.simulator.utils import (
-    extract_interaction_details,
-    async_interaction_request,
     calculate_average_scores,
     summarize_verdicts,
 )
@@ -276,21 +273,21 @@ class ConversationSimulator(BaseProcess):
         start_time = time.time()
 
         results = []
+        dynamic_requests: bool = script.dynamic_requests_schema
         interactions = script.interactions
 
         for interaction in interactions:
-            user_message = interaction.user_message
-            request_payload = interaction.request_payload
+            if dynamic_requests:
+                request_payload = interaction.request_payload
+            else:
+                user_message = interaction.user_message
+                request_payload = interaction.request_payload
+                request_payload.update({"user_message": user_message})
+                logger.info(f"{_LOG} Request payload:\n{request_payload}\n---")
 
-            request_payload.update({"user_message": user_message})
+            mappings = self.endpoint_config.response_mapping
 
-            mappings = self.endpoint_cm.build_response_mapping(
-                [
-                    {"field_path": "payload.message", "extract_as": "agent_reply"},
-                    {"field_path": "payload.metadata", "extract_as": "metadata"},
-                    {"field_path": "eventType", "extract_as": "event_type"},
-                ]
-            )
+            logger.info(f"{_LOG} Response mappings:\n{mappings}\n---")
 
             response = await self.endpoint_cm.send_request(
                 endpoint_config=self.endpoint_config,
@@ -306,7 +303,7 @@ class ConversationSimulator(BaseProcess):
             if not response or response.status_code != 200:
                 logger.error(f"{_LOG} Interaction request failed.")
                 result = {
-                    "user_message": user_message,
+                    "user_message": user_message or "",
                     "generated_reply": "Interaction Request failed",
                     "reference_reply": reference_reply,
                     "generated_metadata": {},
