@@ -279,7 +279,15 @@ class MetadataEvaluator(BaseEvaluator):
         for k, v in output.items():
             field = v.get("field_name", "N/A")
             score = v.get("set_scores", -1)
-            results[field] = int(score[0]) if isinstance(score, list) else int(score)
+
+            if score is None:
+                results[field] = -1
+
+                try:
+                    results[field] = int(score[0]) if isinstance(score, list) else int(score)
+
+                except (TypeError, ValueError):
+                    results[field] = -1
 
         return results
 
