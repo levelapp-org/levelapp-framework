@@ -273,17 +273,26 @@ class ConversationSimulator(BaseProcess):
         start_time = time.time()
 
         results = []
-        dynamic_requests: bool = script.dynamic_requests_schema
+        contextual_mode: bool = script.variable_request_schema
+        logger.info(f"{_LOG} Contextual Mode ON: {contextual_mode}")
         interactions = script.interactions
 
         for interaction in interactions:
-            if dynamic_requests:
+            if contextual_mode:
+                from levelapp.simulator.utils import set_by_path
                 request_payload = interaction.request_payload
+                user_message = interaction.user_message
+                set_by_path(
+                    obj=request_payload,
+                    path=interaction.user_message_path,
+                    value=user_message,
+                )
+                logger.info(f"{_LOG} Request payload (Variable Request Schema):\n{request_payload}\n---")
             else:
                 user_message = interaction.user_message
                 request_payload = interaction.request_payload
                 request_payload.update({"user_message": user_message})
-                logger.info(f"{_LOG} Request payload:\n{request_payload}\n---")
+                logger.info(f"{_LOG} Request payload (Configured Request Schema):\n{request_payload}\n---")
 
             mappings = self.endpoint_config.response_mapping
 
@@ -292,6 +301,7 @@ class ConversationSimulator(BaseProcess):
             response = await self.endpoint_cm.send_request(
                 endpoint_config=self.endpoint_config,
                 context=request_payload,
+                contextual_mode=contextual_mode
             )
 
             logger.info(f"{_LOG} Response:\n{response}\n---")
@@ -303,7 +313,7 @@ class ConversationSimulator(BaseProcess):
             if not response or response.status_code != 200:
                 logger.error(f"{_LOG} Interaction request failed.")
                 result = {
-                    "user_message": user_message or "",
+                    "user_message": user_message,
                     "generated_reply": "Interaction Request failed",
                     "reference_reply": reference_reply,
                     "generated_metadata": {},

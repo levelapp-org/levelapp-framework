@@ -65,17 +65,19 @@ class EndpointConfigManager:
             self,
             endpoint_config: EndpointConfig,
             context: Dict[str, Any],
+            contextual_mode: bool = False
     ) -> httpx.Response:
         payload_builder = RequestPayloadBuilder()
         client = APIClient(config=endpoint_config)
 
-        request_payload = payload_builder.build(
-            schema=endpoint_config.request_schema,
-            context=context,
-        )
+        if not contextual_mode:
+            context = payload_builder.build(
+                schema=endpoint_config.request_schema,
+                context=context,
+            )
 
         async with client:
-            response = await client.execute(payload=request_payload)
+            response = await client.execute(payload=context)
 
         self.logger.info(f"Response status: {response.status_code}")
 
@@ -84,7 +86,7 @@ class EndpointConfigManager:
     @staticmethod
     def extract_response_data(
             response: httpx.Response,
-            mappings: List[ResponseMappingConfig]
+            mappings: List[ResponseMappingConfig],
     ) -> Dict[str, Any]:
         extractor = ResponseDataExtractor()
         response_data = response.json() if response.text else {}
