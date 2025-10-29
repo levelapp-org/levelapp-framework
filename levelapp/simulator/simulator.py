@@ -296,8 +296,6 @@ class ConversationSimulator(BaseProcess):
 
             mappings = self.endpoint_config.response_mapping
 
-            logger.info(f"{_LOG} Response mappings:\n{mappings}\n---")
-
             response = await self.endpoint_cm.send_request(
                 endpoint_config=self.endpoint_config,
                 context=request_payload,
