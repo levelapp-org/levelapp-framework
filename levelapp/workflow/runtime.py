@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Any
 
-from levelapp.config import EndpointConfig
+from levelapp.endpoint.client import EndpointConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
 from levelapp.workflow.config import WorkflowConfig
 from levelapp.core.schemas import EvaluatorType
@@ -12,8 +12,8 @@ from levelapp.core.schemas import EvaluatorType
 class WorkflowContext:
     """Immutable data holder for workflow execution context."""
     config: WorkflowConfig
+    endpoint: EndpointConfig
     repository: BaseRepository
     evaluators: Dict[EvaluatorType, BaseEvaluator]
     providers: List[str]
-    endpoint_config: EndpointConfig
     inputs: Dict[str, Any]

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from levelapp.core.base import BaseProcess
+from levelapp.endpoint.client import EndpointConfig
+from levelapp.endpoint.manager import EndpointConfigManager
 from levelapp.simulator.schemas import ScriptsBatch
 from levelapp.simulator.simulator import ConversationSimulator
 from levelapp.workflow.runtime import WorkflowContext
@@ -69,6 +71,18 @@ class BaseWorkflow(ABC):
         return self._results
 
     @abstractmethod
+    async def test_connection(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Abstract method for testing endpoint connection.
+
+        Args:
+            context (Dict[str, Any]): The context (request payload) to test connectivity with.
+
+        Returns:
+            The test connectivity result.
+        """
+
+    @abstractmethod
     def _setup_process(self, context: WorkflowContext) -> BaseProcess:
         """
         Abstract method for setting up the configured process.
@@ -105,12 +119,29 @@ class SimulatorWorkflow(BaseWorkflow):
         """
         simulator = ConversationSimulator()
         simulator.setup(
-            repository=context.repository,
+            endpoint_config=context.endpoint,
             evaluators=context.evaluators,
             providers=context.providers,
-            endpoint_config=context.endpoint_config,
         )
+
         return simulator
+
+    async def test_connection(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Runs a connectivity test of the configured endpoint.
+
+        Args:
+            context (Dict[str, Any]): The request payload to send for testing.
+
+        Returns:
+            The test connectivity result.
+        """
+        endpoint_cm = EndpointConfigManager()
+        endpoint_cm.set_endpoints(endpoints_config=[self.context.endpoint])
+        tester = endpoint_cm.get_tester(endpoint_name=self.context.endpoint.name)
+        results = await tester.test(context=context)
+
+        return results
 
     def _load_input_data(self, context: WorkflowContext) -> Dict[str, Any]:
         """

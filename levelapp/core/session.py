@@ -1,4 +1,5 @@
 """levelapp/core/session.py"""
+import asyncio
 import threading
 
 from abc import ABC
@@ -225,6 +226,13 @@ class EvaluationSession:
 
         with self.step(step_name=f"{self.session_name}.collect_results", category=MetricType.RESULTS_COLLECTION):
             self.workflow.collect_results()
+
+    def run_connectivity_test(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.workflow:
+            raise RuntimeError(f"{self._NAME} Workflow not initialized")
+
+        results = asyncio.run(self.workflow.test_connection(context=context))
+        return results
 
     def get_stats(self) -> Dict[str, Any]:
         if self.enable_monitoring:

@@ -1,7 +1,6 @@
 """
 'simulators/service.py': Service layer to manage conversation simulation and evaluation.
 """
-import json
 import time
 import asyncio
 
@@ -9,8 +8,12 @@ from datetime import datetime
 from collections import defaultdict
 from typing import Dict, Any, List
 
-from levelapp.core.base import BaseRepository, BaseProcess, BaseEvaluator
-from levelapp.config.endpoint import EndpointConfig
+
+from levelapp.core.base import BaseProcess, BaseEvaluator
+from levelapp.endpoint.client import EndpointConfig
+from levelapp.endpoint.manager import EndpointConfigManager
+
+from levelapp.core.schemas import EvaluatorType
 from levelapp.simulator.schemas import (
     InteractionEvaluationResults,
     ScriptsBatch,
@@ -18,13 +21,10 @@ from levelapp.simulator.schemas import (
     SimulationResults
 )
 from levelapp.simulator.utils import (
-    extract_interaction_details,
-    async_interaction_request,
     calculate_average_scores,
     summarize_verdicts,
 )
 from levelapp.aspects import logger
-from levelapp.core.schemas import EvaluatorType
 
 
 class ConversationSimulator(BaseProcess):
@@ -32,29 +32,26 @@ class ConversationSimulator(BaseProcess):
 
     def __init__(
         self,
-        repository: BaseRepository | None = None,
+        endpoint_config: EndpointConfig | None = None,
         evaluators: Dict[EvaluatorType, BaseEvaluator] | None = None,
         providers: List[str] | None = None,
-        endpoint_config: EndpointConfig | None = None,
+
     ):
         """
         Initialize the ConversationSimulator.
 
         Args:
-            repository (BaseRepository): Service for saving simulation results.
+            endpoint_config (EndpointConfig): Endpoint configuration.
             evaluators (EvaluationService): Service for evaluating interactions.
             endpoint_config (EndpointConfig): Configuration object for VLA.
         """
         self._CLASS_NAME = self.__class__.__name__
 
-        self.repository = repository
+        self.endpoint_config = endpoint_config
         self.evaluators = evaluators
         self.providers = providers
-        self.endpoint_config = endpoint_config
 
-        self._url: str | None = None
-        self._credentials: str | None = None
-        self._headers: Dict[str, Any] | None = None
+        self.endpoint_cm = EndpointConfigManager()
 
         self.test_batch: ScriptsBatch | None = None
         self.evaluation_verdicts: Dict[str, List[str]] = defaultdict(list)
@@ -62,35 +59,33 @@ class ConversationSimulator(BaseProcess):
 
     def setup(
             self,
-            repository: BaseRepository,
+            endpoint_config: EndpointConfig,
             evaluators: Dict[EvaluatorType, BaseEvaluator],
             providers: List[str],
-            endpoint_config: EndpointConfig,
     ) -> None:
         """
         Initialize the ConversationSimulator.
 
         Args:
-            repository (BaseRepository): Repository object for storing simulation results.
+            endpoint_config (EndpointConfig): Configuration object for user endpoint API.
             evaluators (Dict[str, BaseEvaluator]): List of evaluator objects for evaluating interactions.
             providers (List[str]): List of LLM provider names.
-            endpoint_config (EndpointConfig): Configuration object for VLA.
+
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.setup.__name__}]"
         logger.info(f"{_LOG} Setting up the Conversation Simulator..")
 
-        self.repository = repository
+        if not self.endpoint_cm:
+            self.endpoint_cm = EndpointConfigManager()
+
+        self.endpoint_config = endpoint_config
+        self.endpoint_cm.set_endpoints(endpoints_config=[endpoint_config])
+
         self.evaluators = evaluators
         self.providers = providers
 
         if not self.providers:
             logger.warning(f"{_LOG} No LLM providers were provided. The Judge Evaluation process will not be executed.")
-
-        self.endpoint_config = endpoint_config
-
-        self._url = endpoint_config.full_url
-        self._credentials = endpoint_config.api_key.get_secret_value()
-        self._headers = endpoint_config.headers
 
     def get_evaluator(self, name: EvaluatorType) -> BaseEvaluator:
         """
@@ -278,21 +273,36 @@ class ConversationSimulator(BaseProcess):
         start_time = time.time()
 
         results = []
+        contextual_mode: bool = script.variable_request_schema
+        logger.info(f"{_LOG} Contextual Mode ON: {contextual_mode}")
         interactions = script.interactions
 
         for interaction in interactions:
-            user_message = interaction.user_message
-            request_payload = interaction.request_payload
-            self.endpoint_config.variables = {
-                "user_message": user_message,
-                "request_payload": request_payload
-            }
+            if contextual_mode:
+                from levelapp.simulator.utils import set_by_path
+                request_payload = interaction.request_payload
+                user_message = interaction.user_message
+                set_by_path(
+                    obj=request_payload,
+                    path=interaction.user_message_path,
+                    value=user_message,
+                )
+                logger.info(f"{_LOG} Request payload (Variable Request Schema):\n{request_payload}\n---")
+            else:
+                user_message = interaction.user_message
+                request_payload = interaction.request_payload
+                request_payload.update({"user_message": user_message})
+                logger.info(f"{_LOG} Request payload (Configured Request Schema):\n{request_payload}\n---")
 
-            response = await async_interaction_request(
-                url=self.endpoint_config.full_url,
-                headers=self.endpoint_config.headers,
-                payload=self.endpoint_config.request_payload,
+            mappings = self.endpoint_config.response_mapping
+
+            response = await self.endpoint_cm.send_request(
+                endpoint_config=self.endpoint_config,
+                context=request_payload,
+                contextual_mode=contextual_mode
             )
+
+            logger.info(f"{_LOG} Response:\n{response}\n---")
 
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata
@@ -312,14 +322,18 @@ class ConversationSimulator(BaseProcess):
                 results.append(result)
                 continue
 
-            interaction_details = extract_interaction_details(
-                response=response.text,
-                template=self.endpoint_config.response_payload,
+            interaction_details = self.endpoint_cm.extract_response_data(
+                response=response,
+                mappings=mappings,
             )
 
-            generated_reply = interaction_details.generated_reply
-            generated_metadata = interaction_details.generated_metadata
-            extracted_guardrail_flag: bool = interaction_details.guardrail_flag
+            logger.info(f"{_LOG} Interaction details:\n{interaction_details}\n---")
+
+            generated_reply = interaction_details.get("agent_reply", "")
+            generated_metadata = interaction_details.get("metadata", {})
+            extracted_guardrail_flag = interaction_details.get("guardrail_flag", False)
+
+            logger.info(f"{_LOG} Generated reply:\n{generated_reply}\n---")
 
             evaluation_results = await self.evaluate_interaction(
                 user_input=user_message,
@@ -346,7 +360,7 @@ class ConversationSimulator(BaseProcess):
                 "reference_reply": reference_reply,
                 "generated_metadata": generated_metadata,
                 "reference_metadata": reference_metadata,
-                "guardrail_details": interaction_details.guardrail_flag,
+                "guardrail_details": extracted_guardrail_flag,
                 "evaluation_results": evaluation_results.model_dump(),
             }
 

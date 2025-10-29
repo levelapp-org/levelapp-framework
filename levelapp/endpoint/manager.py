@@ -1,4 +1,5 @@
 """levelapp/endpoint/manager.py"""
+import httpx
 import yaml
 import logging
 
@@ -12,13 +13,15 @@ from levelapp.endpoint.client import EndpointConfig, APIClient
 from levelapp.endpoint.parsers import RequestPayloadBuilder, ResponseDataExtractor
 
 
-class ConfigurationManager:
+class EndpointConfigManager:
     """Manages endpoint configurations and creates testers."""
-    def __init__(self, config_path: Path):
+    def __init__(self, config_path: Path | None = None):
         self.config_path = config_path
         self.endpoints: Dict[str, EndpointConfig] = {}
         self.logger = logging.getLogger("ConfigurationManager")
-        self._load_config()
+
+        if config_path:
+            self._load_config()
 
     def _load_config(self) -> None:
         """Load and validate YAML configuration file."""
@@ -31,9 +34,22 @@ class ConfigurationManager:
                 self.endpoints[config.name] = config
                 self.logger.info(f"Loaded endpoint config: {config.name}")
 
+        except ValidationError as e:
+            self.logger.error(f"Failed to load endpoint config: {e}")
+
         except Exception as e:
             self.logger.error(f"Failed to load endpoint config: {e}", exc_info=e)
             raise RuntimeError("Failed to extract endpoints data from YAML file:\n{e}")
+
+    def set_endpoints(self, endpoints_config: List[EndpointConfig]):
+        for endpoint in endpoints_config:
+            try:
+                config = EndpointConfig.model_validate(endpoint)
+                self.endpoints[config.name] = config
+
+            except ValidationError as e:
+                self.logger.error(f"Failed to load endpoint config: {e}", exc_info=e)
+                continue
 
     def build_response_mapping(self, content: List[Dict[str, Any]]) -> List[ResponseMappingConfig]:
         mappings = []
@@ -45,27 +61,34 @@ class ConfigurationManager:
 
         return mappings
 
-    async def extract_response_data(
+    async def send_request(
             self,
-            endpoint_name: str,
+            endpoint_config: EndpointConfig,
             context: Dict[str, Any],
-            mappings: List[ResponseMappingConfig]
-    ) -> Dict[str, Any]:
-        if endpoint_name not in self.endpoints:
-            raise ValueError(f"Endpoint '{endpoint_name}' not found in configuration")
-
+            contextual_mode: bool = False
+    ) -> httpx.Response:
         payload_builder = RequestPayloadBuilder()
-        client = APIClient(config=self.endpoints[endpoint_name])
-        extractor = ResponseDataExtractor()
-        payload = payload_builder.build(
-            schema=self.endpoints[endpoint_name].request_schema,
-            context=context
-        )
+        client = APIClient(config=endpoint_config)
+
+        if not contextual_mode:
+            context = payload_builder.build(
+                schema=endpoint_config.request_schema,
+                context=context,
+            )
 
         async with client:
-            response = await client.execute(payload=payload)
+            response = await client.execute(payload=context)
 
         self.logger.info(f"Response status: {response.status_code}")
+
+        return response
+
+    @staticmethod
+    def extract_response_data(
+            response: httpx.Response,
+            mappings: List[ResponseMappingConfig],
+    ) -> Dict[str, Any]:
+        extractor = ResponseDataExtractor()
         response_data = response.json() if response.text else {}
         extracted = extractor.extract(
             response_data=response_data,

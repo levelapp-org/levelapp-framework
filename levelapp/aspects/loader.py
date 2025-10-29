@@ -111,7 +111,7 @@ class DynamicModelBuilder:
         """
         if isinstance(value, Mapping):
             nested_model = self.create_dynamic_model(model_name=f"{model_name}_{key}", data=value)
-            return nested_model, ...
+            return Optional[nested_model], None
 
         elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
             if not value:
@@ -119,15 +119,15 @@ class DynamicModelBuilder:
 
             elif isinstance(value[0], Mapping):
                 nested_model = self.create_dynamic_model(model_name=f"{model_name}_{key}", data=value[0])
-                return List[nested_model], ...
+                return Optional[List[nested_model]], None
 
             else:
                 field_type = type(value[0]) if value[0] is not None else Any
-                return List[field_type], ...
+                return Optional[List[field_type]], None
 
         else:
             field_type = Optional[type(value)] if value is not None else Optional[Any]
-            return field_type, ...
+            return field_type, None
 
     def create_dynamic_model(self, model_name: str, data: Any) -> Type[BaseModel]:
         """

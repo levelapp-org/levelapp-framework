@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 
 from typing import Dict, Any, List
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import BaseModel, Field, computed_field
 
 from levelapp.evaluator.evaluator import JudgeEvaluationResults
 
@@ -24,13 +24,12 @@ class InteractionLevel(str, Enum):
 class Interaction(BaseModel):
     """Represents a single interaction within a conversation."""
     id: UUID = Field(default_factory=uuid4, description="Interaction identifier")
+    user_message_path: str = Field(..., description="Path of the user message in the request payload")
     user_message: str = Field(..., description="The user's query message")
-    # generated_reply: str = Field(..., description="The agent's reply message")
     reference_reply: str = Field(..., description="The preset reference message")
     interaction_type: InteractionLevel = Field(default=InteractionLevel.INITIAL, description="Type of interaction")
     reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
-    # generated_metadata: Dict[str, Any] = Field(default_factory=dict, description="Extracted metadata")
-    guardrail_flag: bool = Field(default=False, description="Flag for guardrail signaling")
+    guardrail_flag: Any = Field(default=False, description="Flag for guardrail signaling")
     request_payload: Dict[str, Any] = Field(default_factory=dict, description="Additional request payload")
 
 
@@ -40,6 +39,7 @@ class ConversationScript(BaseModel):
     interactions: List[Interaction] = Field(default_factory=list, description="List of interactions")
     description: str = Field(default="no-description", description="A short description of the conversation")
     details: Dict[str, str] = Field(default_factory=dict, description="Conversation details")
+    variable_request_schema: bool = Field(default=False, description="The payload schema changes for each request")
 
 
 class ScriptsBatch(BaseModel):
