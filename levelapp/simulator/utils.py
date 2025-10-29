@@ -71,39 +71,6 @@ def set_by_path(obj: Dict, path: str, value: Any) -> None:
             return
 
 
-@MonitoringAspect.monitor(name="interaction_request", category=MetricType.API_CALL)
-async def async_interaction_request(
-        url: str,
-        headers: Dict[str, str],
-        payload: Dict[str, Any],
-) -> httpx.Response | None:
-    """
-    Perform an asynchronous interaction request.
-
-    Args:
-        url (str): The URL to send the request to.
-        headers (Dict[str, str]): The headers to include in the request.
-        payload (Dict[str, Any]): The payload to send in the request.
-
-    Returns:
-        httpx.Response: The response from the interaction request, or None if an error occurred.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=180) as client:
-            response = await client.post(url=url, headers=headers, json=payload)
-            response.raise_for_status()
-
-            return response
-
-    except httpx.HTTPStatusError as http_err:
-        logger.error(f"[async_interaction_request] HTTP error: {http_err.response.text}", exc_info=True)
-
-    except httpx.RequestError as req_err:
-        logger.error(f"[async_interaction_request] Request error: {str(req_err)}", exc_info=True)
-
-    return None
-
-
 @MonitoringAspect.monitor(
     name="average_calc",
     category=MetricType.SCORING,
