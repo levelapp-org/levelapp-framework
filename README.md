@@ -62,23 +62,54 @@ evaluation:
     field_2 : LEVENSHTEIN
 
 reference_data:
-  path: 
+  path: "../data/conversation_example_1.json"
   data:
 
 endpoint:
-  base_url: "http://127.0.0.1:8000"
-  url_path: ''
-  api_key: "<API-KEY>"
-  bearer_token: "<BEARER-TOKEN>"
-  model_id: "meta-llama/Meta-Llama-3.1-8B-Instruct"
-  default_request_payload_template:
-    # Change the user message field name only according to the request payload schema (example: 'prompt' to 'message').
-    prompt: "${user_message}"
-    details: "${request_payload}"  # Rest of the request payload data.
-  default_response_payload_template:
-    # Change the placeholder value only according to the response payload schema (example: ${agent_reply} to ${reply}).
-    agent_reply: "${agent_reply}"
-    generated_metadata: "${generated_metadata}"
+  name: conversational-agent
+  base_url: http://127.0.0.1:8000
+  path: /v1/chat
+  method: POST
+  timeout: 60
+  retry_count: 3
+  retry_backoff: 0.5
+  headers:
+    - name: model_id
+      value: meta-llama/Meta-Llama-3-8B-Instruct
+      secure: false
+    - name: x-api-key
+      value: API_KEY  # Load from .env file using python-dotenv.
+      secure: true
+    - name: Content-Type
+      value: application/json
+      secure: false
+  request_schema:
+    # Static field to be included in every request.
+    - field_path: message.source
+      value: system
+      value_type: static
+      required: true
+      
+    # Dynamic field to be populated from runtime context.
+    - field_path: message.text
+      value: message_text  # the key from the runtime context.
+      value_type: dynamic
+      required: true
+      
+    # Env-based field (from OS environment variables).
+    - field_path: metadata.env
+      value: ENV_VAR_NAME
+      value_type: env
+      required: false
+      
+  response_mapping:
+    # Map the response fields that will be extracted.
+    - field_path: reply.text
+      extract_as: agent_reply  # The simulator requires this key: 'agent_reply'.
+    - field_path: reply.metadata
+      extract_as: generated_metadata  # The simulator requires this key: 'generated_metadata'.
+    - field_path: reply.guardrail_flag
+      extract_as: guardrail_flag  # The simulator requires this key: 'guardrail_flag'.
 
 repository:
   type: FIRESTORE # Pick one of the following: FIRESTORE, FILESYSTEM
@@ -86,8 +117,8 @@ repository:
   database_name: ""
 ```
 
-- **Endpoint Configuration**: Define how to interact with your LLM-based system (base URL, auth, payload templates).
-- **Placeholders**: For the request payload, change the field names (e.g., 'prompt' to 'message') according to your API specs. For the response payload, change the place holders values (e.g., `${agent_reply}` to `${generated_reply}`).
+- **Endpoint Configuration**: Define how to interact with your LLM-based system (base URL, headers, request/response payload schema).
+- **Placeholders**: For dynamic request schema fields, use the values ('value') to dynamically populate these fields during runtime (e.g., `context = {'message_text': "Hello, world!"}`).
 - **Secrets**: Store API keys in `.env` and load via `python-dotenv` (e.g., `API_KEY=your_key_here`).
 
 For conversation scripts (used in Simulator), provide a JSON file with this schema:
@@ -102,16 +133,14 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
           "reference_reply": "Sure, I can help with that. Could you please specify the type of doctor you need to see?",
           "interaction_type": "initial",
           "reference_metadata": {},
-          "guardrail_flag": false,
-          "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
+          "guardrail_flag": false
         },
         {
           "user_message": "I need to see a cardiologist.",
           "reference_reply": "When would you like to schedule your appointment?",
           "interaction_type": "intermediate",
           "reference_metadata": {},
-          "guardrail_flag": false,
-          "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
+          "guardrail_flag": false
         },
         {
           "user_message": "I would like to book it for next Monday morning.",
@@ -122,8 +151,7 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
             "date": "next Monday",
             "time": "10 AM"
           },
-          "guardrail_flag": false,
-          "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
+          "guardrail_flag": false
         },
         {
           "id": "f4f2dd35-71d7-4b75-ba2b-93a4f546004a",
@@ -131,8 +159,7 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
           "reference_reply": "Your appointment with the cardiologist is booked for 10 AM next Monday. Is there anything else I can help you with?",
           "interaction_type": "final",
           "reference_metadata": {},
-          "guardrail_flag": false,
-          "request_payload": {"user_id":  "0001", "user_role": "ADMIN"}
+          "guardrail_flag": false
         }
       ],
       "description": "A conversation about booking a doctor appointment.",
@@ -193,11 +220,90 @@ if __name__ == "__main__":
 
     
     config_dict = {
-        "process": {"project_name": "test-project", "workflow_type": "SIMULATOR", "evaluation_params": {"attempts": 2}},
-        "evaluation": {"evaluators": ["JUDGE", "REFERENCE"], "providers": ["openai", "ionos"], "metrics_map": {"field_1": "EXACT"}},
-        "reference_data": {"path": "", "data": {}},
-        "endpoint": {"base_url": "http://127.0.0.1:8000", "api_key": "key", "model_id": "model"},
-        "repository": {"type": "FIRESTORE", "source": "IN_MEMORY"},
+        "process": {
+            "project_name": "test-project",
+            "workflow_type": "SIMULATOR",  # Pick one of the following workflows: SIMULATOR, COMPARATOR, ASSESSOR.
+            "evaluation_params": {
+                "attempts": 1,  # Add the number of simulation attempts.
+            }
+        },
+        "evaluation": {
+            "evaluators": ["JUDGE", "REFERENCE"],  # Select from the following: JUDGE, REFERENCE, RAG.
+            "providers": ["openai", "ionos"],
+            "metrics_map": {
+                "field_1": "EXACT",
+                "field_2": "LEVENSHTEIN"
+            }
+        },
+        "reference_data": {
+            "path": "../data/conversation_example_1.json",
+            "data": None
+        },
+        "endpoint": {
+            "name": "conversational-agent",
+            "base_url": "http://127.0.0.1:8000",
+            "path": "/v1/chat",
+            "method": "POST",
+            "timeout": 60,
+            "retry_count": 3,
+            "retry_backoff": 0.5,
+            "headers": [
+                {
+                    "name": "model_id",
+                    "value": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                    "secure": False
+                },
+                {
+                    "name": "x-api-key",
+                    "value": "API_KEY",  # Load from .env file using python-dotenv.
+                    "secure": True 
+                },
+                {
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "secure": False
+                }
+            ],
+            "request_schema": [
+                {
+                    "field_path": "message.source",
+                    "value": "system",
+                    "value_type": "static",
+                    "required": True
+                },
+                {
+                    "field_path": "message.text",
+                    "value": "message_text",  # the key from the runtime context.
+                    "value_type": "dynamic",
+                    "required": True
+                },
+                {
+                    "field_path": "metadata.env",
+                    "value": "ENV_VAR_NAME",
+                    "value_type": "env",
+                    "required": False
+                }
+            ],
+            "response_mapping": [
+                {
+                    "field_path": "reply.text",
+                    "extract_as": "agent_reply"  # Remember that the simulator requires this key: 'agent_reply'.
+                },
+                {
+                    "field_path": "reply.metadata",
+                    "extract_as": "agent_reply"  # Remember that the simulator requires this key: 'agent_reply'.
+                },
+                {
+                    "field_path": "reply.guardrail_flag",
+                    "extract_as": "metadata"  # Remember that the simulator requires this key: 'agent_reply'.
+                }
+            ]
+        },
+        "repository": {
+            "type": "FIRESTORE",  # Pick one of the following: FIRESTORE, FILESYSTEM
+            "project_id": "(default)",
+            "database_name": ""
+        }
     }
 
     content = {
@@ -223,9 +329,18 @@ if __name__ == "__main__":
     # Load reference data from dict variable
     config.set_reference_data(content=content)
 
-    evaluation_session = EvaluationSession(session_name="test-session-2", workflow_config=config)
+    evaluation_session = EvaluationSession(
+        session_name="test-session", 
+        workflow_config=config, 
+        enable_monitoring=True  # To disable the monitoring aspect, set this to False.
+    )
 
     with evaluation_session as session:
+        # Optional: Run connectivity test before the full evaluation
+        test_results = session.run_connectivity_test(
+            context={"user_message": "I want to book an appointment with a dentist."}
+        )
+        print(f"Connectivity Test Results:\n{test_results}\n---")
         session.run()
         results = session.workflow.collect_results()
         print("Results:", results)
