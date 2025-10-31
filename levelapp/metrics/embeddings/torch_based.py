@@ -1,4 +1,4 @@
-"""levelapp/metrics/embedding/torch_based.py"""
+"""levelapp/metrics/embeddings/torch_based.py"""
 import torch
 
 from typing import Any, Dict
@@ -8,7 +8,7 @@ from levelapp.core.base import BaseMetric
 
 
 class TorchEmbeddingMetric(BaseMetric):
-    """Embedding similarity using a Transformer model (mean-pooled embedding)."""
+    """Embedding similarity using a Transformer model (mean-pooled embeddings)."""
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2", **kwargs):
         super().__init__(processor=kwargs.get("processor"), score_cutoff=kwargs.get("score_cutoff"))
         self.model_name = model_name
