@@ -48,6 +48,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.optional-dependencies]
+embeddings = [
+    "torch>=2.0",
+    "transformers>=4.40",
+    "bert-score>=0.3"
+]
 dev = [
     "google-api-core>=2.25.1",
     "google-auth>=2.40.3",
