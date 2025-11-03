@@ -12,7 +12,7 @@ from levelapp.core.base import BaseMetric
 class SentenceEmbeddingMetric(BaseMetric):
     """Lightweight embeddings similarity using TF-IDF cosine similarity."""
     def __init__(self, **kwargs):
-        super().__init__(processor=kwargs.get("processor"), score_cutoff=kwargs.get("score_cutoof"))
+        super().__init__(processor=kwargs.get("processor"), score_cutoff=kwargs.get("score_cutoff"))
         self.vectorizer = TfidfVectorizer()
 
     def compute(self, generated: str, reference: str) -> Dict[str, Any]:
