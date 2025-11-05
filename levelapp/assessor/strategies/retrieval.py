@@ -1,5 +1,6 @@
 """levelapp/assessor/strategies/retrieval.py"""
 import asyncio
+import hashlib
 import uuid
 
 import numpy as np
@@ -8,6 +9,10 @@ from typing import List, Dict, Any
 
 from levelapp.assessor.registry import RetrievalStrategy
 from levelapp.assessor.schemas import Document
+
+
+def deterministic_id(text: str) -> str:
+    return hashlib.md5(text.strip().lower().encode()).hexdigest()
 
 
 class CosineRetrievalStrategy(RetrievalStrategy):
@@ -20,18 +25,18 @@ class CosineRetrievalStrategy(RetrievalStrategy):
         scores = []
         for emb in embedded_chunks:
             sim = np.dot(query_vec, emb["embedding"])
-            scores.append((emb["text"], sim))
+            scores.append((emb["text"], sim, emb.get("parent_id")))
 
         top_k = self.config.get("top_k", 5)
         top_chunks = sorted(scores, key=lambda x: x[1], reverse=True)[:top_k]
 
         docs = [
             Document(
-                id=str(uuid.uuid4()),
+                id=parent_id or f"retrieved-{i}",
                 content=text,
                 source_type="CosineRetrievalStrategy",
                 metadata={"score": float(score)}
-            ) for text, score in top_chunks
+            ) for i, (text, score, parent_id) in enumerate(top_chunks)
         ]
 
         await asyncio.sleep(0)

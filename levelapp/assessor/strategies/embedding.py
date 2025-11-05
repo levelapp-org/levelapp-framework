@@ -9,18 +9,20 @@ from levelapp.assessor.registry import BaseStrategy
 
 class MockEmbeddingStrategy(BaseStrategy):
     """Simulates embedding generation for each chunk."""
-    async def run(self, chunks: List[str]) -> List[Dict[str, Any]]:
+    async def run(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         rng = np.random.default_rng(42)
         embeddings = []
-        for idx, chunk in enumerate(chunks):
-            vector = rng.normal(size=768)  # deterministic random vector
+
+        for chunk in chunks:
+            vec = rng.standard_normal(768)
+            vec /= np.linalg.norm(vec)
             embeddings.append(
                 {
-                    "chunk_id": idx,
-                    "text": chunk,
-                    "embedding": vector / np.linalg.norm(vector),
+                    "text": chunk["text"],
+                    "embedding": vec,
+                    "parent_id": chunk.get("parent_id"),
+                    "source_type": "MockEmbeddingStrategy",
                 }
             )
 
-        await asyncio.sleep(0)
         return embeddings

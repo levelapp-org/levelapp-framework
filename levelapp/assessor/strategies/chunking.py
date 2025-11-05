@@ -1,7 +1,5 @@
 """levelapp/assessor/strategies/chunking.py"""
-import asyncio
-
-from typing import List
+from typing import List, Dict, Any
 
 from levelapp.assessor.registry import ChunkingStrategy
 from levelapp.assessor.schemas import Document
@@ -9,14 +7,15 @@ from levelapp.assessor.schemas import Document
 
 class SimpleChunkingStrategy(ChunkingStrategy):
     """Splits documents text into naive fixed-size chunks by sentence length."""
-    async def run(self, document: Document) -> List[str]:
-        max_len = self.config.get("chunk_size", 300)
-        text = document.content
-        words = text.split()
-        chunks = [
-            " ".join(words[i:i + max_len])
-            for i in range(0, len(words), max_len)
-        ]
+    async def run(self, document: Document) -> List[Dict[str, Any]]:
+        text = document.content.strip()
+        chunks = [chunk.strip() for chunk in text.split("\n") if chunk.strip()]
 
-        await asyncio.sleep(0)
-        return chunks
+        return [
+            {
+                "text": chunk,
+                "parent_id": document.id,
+                "source_type": "SimpleChunkingStrategy",
+            }
+            for chunk in chunks
+        ]
