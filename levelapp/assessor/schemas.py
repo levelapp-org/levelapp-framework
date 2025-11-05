@@ -1,6 +1,6 @@
 """levelapp/assessor/schemas.py"""
-from typing import List, Dict
-from pydantic import BaseModel, Field, Any
+from typing import List, Dict, Any
+from pydantic import BaseModel, Field
 
 
 class Document(BaseModel):
@@ -16,6 +16,7 @@ class StrategyConfig(BaseModel):
     parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
+# TODO-0: Hmmm?
 class PipelineConfig(BaseModel):
     chunking: StrategyConfig
     embedding: StrategyConfig
@@ -23,18 +24,17 @@ class PipelineConfig(BaseModel):
     generation: StrategyConfig | None = None
 
 
+class EvaluationSummary(BaseModel):
+    query: str
+    reference_run_id: str | None = None
+    base_pipeline_id: str | None = None
+    comparative_metrics: List[Dict[str, Any]] = Field(default_factory=list)
+    report: Dict[str, Any] = Field(default_factory=dict)
+
+
 class PipelineResult(BaseModel):
     pipeline_id: str
     strategies: Dict[str, str]
     retrieved_docs: List[Document]
     augmented_answer: str | None = None
-    metrics: Dict[str, float] | None = None
-
-
-class EvaluationSummary(BaseModel):
-    query: str
-    reference_run_id: str | None
-    comparative_metrics: Dict[str, Dict[str, float]]
-    base_pipeline_id: str | None
-    report: str
-
+    metrics: EvaluationSummary | None = None

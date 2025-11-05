@@ -11,7 +11,7 @@ class BaseStrategy(ABC):
     name: str
     config: Dict[str, Any]
 
-    def __init__(self, name: str, config: Dict[str, Any]) -> None:
+    def __init__(self, name: str, config: Dict[str, Any] | None = None) -> None:
         self.name = name
         self.config = config
 
@@ -23,7 +23,7 @@ class BaseStrategy(ABC):
 
 class ChunkingStrategy(BaseStrategy):
     """Chunking strategy."""
-    async def run(self, chunks: List[str]) -> List[List[float]]:
+    async def run(self, document: Document) -> List[List[float]]:
         """Generate embeddings for chunks."""
         pass
 
@@ -47,9 +47,18 @@ class GenerationStrategy(BaseStrategy):
 class StrategyRegistry:
     """Maintains available strategy classes for each type."""
     def __init__(self) -> None:
-        self._registry: Dict[str, Dict[str, Type[ChunkingStrategy]]] = {
+        self._registry: Dict[str, Dict[str, Type[BaseStrategy]]] = {
             "chunking": {},
             "embedding": {},
             "retrieval": {},
             "generation": {},
         }
+
+    def register(self, strategy_type: str, name: str, cls: Type[BaseStrategy]) -> None:
+        self._registry[strategy_type][name] = cls
+
+    def get(self, strategy_type: str, name: str) -> Type[BaseStrategy]:
+        return self._registry[strategy_type][name]
+
+    def list_strategies(self) -> Dict[str, List[str]]:
+        return {stype: list(names.keys()) for stype, names in self._registry.items()}
