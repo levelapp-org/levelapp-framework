@@ -5,6 +5,7 @@ from levelapp.aspects import logger
 from levelapp.core.base import BaseMetric
 from levelapp.metrics.exact import EXACT_METRICS
 from levelapp.metrics.fuzzy import FUZZY_METRICS
+from levelapp.metrics.rag.retrieval import RAG_RETRIEVAL_METRICS
 
 
 class MetricRegistry:
@@ -53,7 +54,7 @@ class MetricRegistry:
         cls._metrics.pop(name, None)
 
 
-METRICS = FUZZY_METRICS | EXACT_METRICS
+METRICS = FUZZY_METRICS | EXACT_METRICS | RAG_RETRIEVAL_METRICS
 
 for name_, metric_class_ in METRICS.items():
     try:

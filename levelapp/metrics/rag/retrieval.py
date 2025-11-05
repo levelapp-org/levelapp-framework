@@ -61,7 +61,7 @@ class NDCGMetric(BaseMetric):
         actual_ids = set(_docs_ids(docs=actual))
 
         relevance = {doc_id: 1.0 - (i / len(expected_ids)) for i, doc_id in enumerate(expected_ids)}
-        dcg = sum(relevance.get(doc_id, 0) / math.log2(i + 1) for i, doc_id in enumerate(actual_ids))
+        dcg = sum(relevance.get(doc_id, 0) / math.log2(i + 2) for i, doc_id in enumerate(actual_ids))
         ideal_dcg = sum(relevance[doc_id] / math.log2(i + 2) for i, doc_id in enumerate(expected_ids))
 
         score = dcg / ideal_dcg if ideal_dcg > 0 else 0.0
