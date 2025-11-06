@@ -1,105 +1,87 @@
 """levelapp/assessor/orchestrator.py"""
-import itertools
-import asyncio
 import uuid
 
-from typing import List, Dict
+from typing import List, Dict, Any
 
-from levelapp.assessor.gauger import RetrievalGauger
+from levelapp.assessor.gauger import ProfileGauger
 from levelapp.assessor.registry import StrategyRegistry
-from levelapp.assessor.schemas import Document, PipelineResult, PipelineConfig
+from levelapp.assessor.schemas import Document, PipelineResult
 
 
-class GridSearchOrchestrator:
-    def __init__(self, registry: StrategyRegistry, endpoint):
+class ProfileOrchestrator:
+    def __init__(self, registry: StrategyRegistry, endpoint=None):
         self._registry = registry
         self._endpoint = endpoint
 
-    async def run_grid_search(
+    async def run_profile(
             self,
+            profile_name: str,
             query: str,
             documents: List[Document],
-            strategy_grid: Dict[str, List[str]],
-    ) -> List[PipelineResult]:
-        """
-        Run all combinations of chunking/embedding/retrieval/generation strategies.
-        """
-        combinations = list(itertools.product(
-            strategy_grid["chunking"],
-            strategy_grid["embedding"],
-            strategy_grid["retrieval"],
-            strategy_grid.get("generation", [None]),
-        ))
-
-        results = []
-        tasks = []
-
-        for chunker, embedder, retriever, generator in combinations:
-            pipeline_id = str(uuid.uuid4())
-            tasks.append(self._execute_pipeline(
-                pipeline_id=pipeline_id,
-                query=query,
-                documents=documents,
-                chunker_name=chunker,
-                embedder_name=embedder,
-                retriever_name=retriever,
-                generator_name=generator,
-            ))
-
-        results = await asyncio.gather(*tasks)
-        return results
-
-    async def _execute_pipeline(
-            self,
-            pipeline_id: str,
-            query: str,
-            documents: List[Document],
-            chunker_name: str,
-            embedder_name: str,
-            retriever_name: str,
-            generator_name: str | None = None,
+            profile_config: Dict[str, Any],
     ) -> PipelineResult:
-        chunker_cls = self._registry.get("chunking", chunker_name)
-        embedder_cls = self._registry.get("embedding", embedder_name)
-        retriever_cls = self._registry.get("retrieval", retriever_name)
-        generator_cls = self._registry.get("generation", generator_name) if generator_name else None
+        """
+        Executes a single profile configuration.
+        Example structure of profile_config:
+        {
+            "chunking": {"name": "semantic", "config": {"chunk_size": 300}},
+            "embedding": {"name": "transformer", "config": {"model": "all-MiniLM-L6-v2"}},
+            "retrieval": {"name": "faiss", "config": {"top_k": 5}},
+            "generation": {"name": "llm_openai", "config": {"model": "gpt-4o-mini"}},
+        }
+        """
+        pipeline_id = str(uuid.uuid4())
 
-        chunker = chunker_cls(name=chunker_name, config={})
-        embedder = embedder_cls(name=embedder_name, config={})
-        retriever = retriever_cls(name=retriever_name, config={})
-        generator = generator_cls(name=generator_name, config={}) if generator_name else None
+        chunker = self._build_strategy("chunking", profile_config)
+        embedding = self._build_strategy("embedding", profile_config)
+        retrieval = self._build_strategy("retrieval", profile_config)
+        generator = self._build_strategy("generation", profile_config)
 
         all_chunks = []
         for doc in documents:
             chunks = await chunker.run(doc)
             all_chunks.extend(chunks)
 
-        embeddings = await embedder.run(all_chunks)
-        retrieved_docs = await retriever.run(query, embeddings)
+        embeddings = await embedding.run(all_chunks)
+        retrieved_docs = await retrieval.run(query, embeddings)
 
-        gauger = RetrievalGauger()
-
+        gauger = ProfileGauger()
         evaluated_results = await gauger.evaluate_pipeline(
             pipeline_result=PipelineResult(
                 pipeline_id=pipeline_id,
                 strategies={
-                    "chunking": chunker_name,
-                    "embedding": embedder_name,
-                    "retrieval": retriever_name,
-                    "generation": generator_name,
+                    "profile": profile_name,
+                    "chunking": chunker.name,
+                    "embedding": embedding.name,
+                    "retrieval": retrieval.name,
+                    "generation": generator.name if generator else None,
                 },
                 retrieved_docs=retrieved_docs,
-                augmented_answer=None
+                augmented_answer=None,
             ),
             expected_docs=documents,
         )
 
-        generated_answer = None
-        if generator_name:
+        if generator:
             generated_answer = await generator.run(query, retrieved_docs)
             evaluated_results.augmented_answer = generated_answer
 
         return evaluated_results
+
+    def _build_strategy(self, strategy_type: str, profile_config: Dict[str, Any], optional: bool = False):
+        """Builds a strategy instance from registry + profile config."""
+        strat_data = profile_config.get(strategy_type)
+
+        if not strat_data:
+            if optional:
+                return None
+            raise ValueError(f"[ProfileOrchestrator] Missing required config for '{strategy_type}' in profile")
+
+        name = strat_data.get("name")
+        config = strat_data.get("config", {})
+        strategy_cls = self._registry.get(strategy_type=strategy_type, name=name)
+
+        return strategy_cls(name=name, config=config)
 
 
 if __name__ == '__main__':
@@ -116,30 +98,37 @@ if __name__ == '__main__':
     registry.register("retrieval", "cosine", CosineRetrievalStrategy)
     registry.register("generation", "mock", MockGenerationStrategy)
 
-    orchestrator = GridSearchOrchestrator(registry=registry, endpoint=None)
+    orchestrator = ProfileOrchestrator(registry=registry, endpoint=None)
 
-    query = "What is the role of mitochondria?"
-    documents = [
+    # === Example profile config ===
+    basic_profile = {
+        "chunking": {"name": "simple", "config": {"chunk_size": 300}},
+        "embedding": {"name": "mock", "config": {}},
+        "retrieval": {"name": "cosine", "config": {"top_k": 5}},
+        "generation": {"name": "mock", "config": {}},
+    }
+
+    query_ = "What is the role of mitochondria?"
+    documents_ = [
         Document(
-            id="0bd28cfec6794acf399466cf39f534bc",
+            id="0001",
             content="Mitochondria are the powerhouses of the cell. They produce ATP.",
             source_type="document",
         ),
         Document(
-            id="88afd984e0241163fe472caffb6057c4",
+            id="0002",
             content="Cells contain various organelles including mitochondria and ribosomes.",
             source_type="document",
-        )
+        ),
     ]
 
-    strategy_grid = {
-        "chunking": ["simple"],
-        "embedding": ["mock"],
-        "retrieval": ["cosine"],
-        "generation": ["mock"],
-    }
+    results = asyncio.run(
+        orchestrator.run_profile(
+            profile_name="basic",
+            query=query_,
+            documents=documents_,
+            profile_config=basic_profile,
+        )
+    )
 
-    results_ = asyncio.run(orchestrator.run_grid_search(query, documents, strategy_grid))
-    for res in results_:
-        print(res.model_dump_json(indent=2))
-        print("---")
+    print(results.model_dump_json(indent=2))
