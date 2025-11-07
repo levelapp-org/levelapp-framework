@@ -8,7 +8,7 @@ import requests
 from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
-from typing import List, Dict, Any, Callable, TypeVar, Type
+from typing import List, Dict, Any, Callable, TypeVar, Type, Protocol, overload
 
 from levelapp.aspects import JSONSanitizer
 
@@ -216,8 +216,17 @@ class BaseChatClient(ABC):
             raise
 
 
+class MetricProtocol(Protocol):
+    """Common interface for all metrics (used for registration and typing)."""
+    def __init__(self, **kwargs: Any): ...
+    @property
+    def name(self) -> str: ...
+    def compute(self, *args, **kwargs) -> Dict[str, Any]: ...
+    def _build_metadata(self, **kwargs) -> Dict[str, Any]: ...
+
+
 class BaseMetric(ABC):
-    """Abstract base class for metrics collection."""
+    """Abstract base class for text-based metrics."""
 
     def __init__(self, processor: Callable | None = None, score_cutoff: float | None = None):
         """
@@ -254,7 +263,6 @@ class BaseMetric(ABC):
         """
         return self.__class__.__name__.lower()
 
-    # TODO-0: You know what..We can remove this at some point.
     @staticmethod
     def _validate_inputs(generated: str, reference: str) -> None:
         """Validate that both inputs are strings."""
@@ -278,13 +286,14 @@ class BaseMetric(ABC):
         }
 
 
-class RAGMetric(BaseMetric, ABC):
+class RAGMetric(ABC):
     """
     Abstract base class for RAG metrics (retrieval, generation, semantic).
     Extends BaseMetric with non-textual evaluation logic.
     """
     def __init__(self, processor: Callable | None = None, score_cutoff: float | None = None):
-        super().__init__(processor=processor, score_cutoff=score_cutoff)
+        self.processor = processor
+        self.score_cutoff = score_cutoff
 
     @abstractmethod
     def compute(self, *args, **kwargs) -> Dict[str, Any]:
@@ -299,10 +308,17 @@ class RAGMetric(BaseMetric, ABC):
         raise NotImplementedError
 
     def _build_metadata(self, stage: str | None = None, **extra_inputs):
-        data = super()._build_metadata(**extra_inputs)
-        data["domain"] = self.domain
+        data = {
+            "type": self.__class__.__name__,
+            "params": {"processor": repr(self.processor), "score_cutoff": self.score_cutoff},
+            "inputs": extra_inputs,
+            "timestamp": datetime.datetime.now(),
+            "domain": self.domain,
+        }
+
         if stage:
             data["stage"] = stage
+
         return data
 
     @property
