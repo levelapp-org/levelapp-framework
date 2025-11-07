@@ -46,7 +46,7 @@ class ProfileOrchestrator:
         retrieved_docs = await retrieval.run(query, embeddings)
 
         gauger = ProfileGauger()
-        evaluated_results = await gauger.evaluate_pipeline(
+        evaluated_results = await gauger.evaluate_profile(
             pipeline_result=PipelineResult(
                 pipeline_id=pipeline_id,
                 strategies={
