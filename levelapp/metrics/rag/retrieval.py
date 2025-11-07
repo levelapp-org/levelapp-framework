@@ -3,7 +3,7 @@ import math
 
 from typing import List, Dict, Any
 
-from levelapp.core.base import BaseMetric
+from levelapp.core.base import RAGMetric
 
 
 def _docs_ids(docs: List[Dict[str, Any]]) -> List[str]:
@@ -11,7 +11,7 @@ def _docs_ids(docs: List[Dict[str, Any]]) -> List[str]:
     return [d["id"] if isinstance(d, dict) else getattr(d, "id", None) for d in docs]
 
 
-class PrecisionMetric(BaseMetric):
+class RetrievalPrecisionMetric(RAGMetric):
     """Precision@k: relevant / retrieved."""
 
     def compute(self, expected: List[Dict[str, Any]], actual: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -23,37 +23,37 @@ class PrecisionMetric(BaseMetric):
         else:
             score = float(len(expected_ids.intersection(actual_ids)) / len(actual_ids)) if actual_ids else 0.0
 
-        return {
-            "score": score,
-            "metadata": {
-                "num_expected": len(expected_ids),
-                "num_actual": len(actual_ids),
-            }
-        }
+        metadata = self._build_metadata(
+            stage="retrieval",
+            num_expected=len(expected_ids),
+            num_actual=len(actual_ids),
+        )
+
+        return {"score": score, "metadata": metadata}
 
 
-class RecallMetric(BaseMetric):
+class RetrievalRecallMetric(RAGMetric):
     """Recall@k: relevant retrieved/ total relevant."""
 
     def compute(self, expected: List[Dict[str, Any]], actual: List[Dict[str, Any]]) -> Dict[str, Any]:
         expected_ids = set(_docs_ids(docs=expected))
         actual_ids = set(_docs_ids(docs=actual))
 
-        if not actual_ids:
+        if not expected_ids:
             score = 0.0
         else:
             score = float(len(expected_ids.intersection(actual_ids)) / len(expected_ids)) if expected_ids else 0.0
 
-        return {
-            "score": score,
-            "metadata": {
-                "num_expected": len(expected_ids),
-                "num_actual": len(actual_ids),
-            }
-        }
+        metadata = self._build_metadata(
+            stage="retrieval",
+            num_expected=len(expected_ids),
+            num_actual=len(actual_ids),
+        )
+
+        return {"score": score, "metadata": metadata}
 
 
-class NDCGMetric(BaseMetric):
+class RetrievalNDCGMetric(RAGMetric):
     """Normalize Discounted Cumulative Gain."""
 
     def compute(self, expected: List[Dict[str, Any]], actual: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -66,16 +66,16 @@ class NDCGMetric(BaseMetric):
 
         score = dcg / ideal_dcg if ideal_dcg > 0 else 0.0
 
-        return {
-            "score": score,
-            "metadata": {
-                "num_expected": len(expected_ids),
-                "num_actual": len(actual_ids),
-            }
-        }
+        metadata = self._build_metadata(
+            stage="retrieval",
+            num_expected=len(expected_ids),
+            num_actual=len(actual_ids),
+        )
+
+        return {"score": score, "metadata": metadata}
 
 
-class RedundancyMetric(BaseMetric):
+class RetrievalRedundancyMetric(RAGMetric):
     """Fraction of duplicate documents in retrieval results."""
 
     def compute(self, expected: List[Dict[str, Any]], actual: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -92,18 +92,18 @@ class RedundancyMetric(BaseMetric):
 
         score = redundant / max(1, len(actual))
 
-        return {
-            "score": score,
-            "metadata": {
-                "redundant": redundant,
-                "total": len(actual),
-            }
-        }
+        metadata = self._build_metadata(
+            stage="retrieval",
+            redundant=redundant,
+            total=len(actual),
+        )
+
+        return {"score": score, "metadata": metadata}
 
 
 RAG_RETRIEVAL_METRICS = {
-    "precision": PrecisionMetric,
-    "recall": RecallMetric,
-    "ndcg": NDCGMetric,
-    "redundancy": RedundancyMetric,
+    "precision": RetrievalPrecisionMetric,
+    "recall": RetrievalRecallMetric,
+    "ndcg": RetrievalNDCGMetric,
+    "redundancy": RetrievalRedundancyMetric,
 }

@@ -278,6 +278,46 @@ class BaseMetric(ABC):
         }
 
 
+class RAGMetric(BaseMetric, ABC):
+    """
+    Abstract base class for RAG metrics (retrieval, generation, semantic).
+    Extends BaseMetric with non-textual evaluation logic.
+    """
+    def __init__(self, processor: Callable | None = None, score_cutoff: float | None = None):
+        super().__init__(processor=processor, score_cutoff=score_cutoff)
+
+    @abstractmethod
+    def compute(self, *args, **kwargs) -> Dict[str, Any]:
+        """
+        Compute metric score for a RAG component.
+
+        Expected signatures:
+            - Retrieval: compute(expected_docs: Any, actual_docs: Any)
+            - Generation: compute(query: str, context_docs: Any, generated_answer: str)
+            - Semantic: compute(source: str, target: str, context: Any)
+        """
+        raise NotImplementedError
+
+    def _build_metadata(self, stage: str | None = None, **extra_inputs):
+        data = super()._build_metadata(**extra_inputs)
+        data["domain"] = self.domain
+        if stage:
+            data["stage"] = stage
+        return data
+
+    @property
+    def domain(self) -> str:
+        """Return the RAG domain (retrieval, generation, semantic) inferred from class name."""
+        name = self.__class__.__name__.lower()
+        if "retriev" in name:
+            return "retrieval"
+        elif "gen" in name:
+            return "generation"
+        elif "sem" in name:
+            return "semantic"
+        return "unknown"
+
+
 class BaseRepository(ABC):
     """
     Abstract base class for pluggable NoSQL data stores.
