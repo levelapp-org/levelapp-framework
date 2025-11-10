@@ -17,3 +17,5 @@ class WorkflowContext:
     evaluators: Dict[EvaluatorType, BaseEvaluator]
     providers: List[str]
     inputs: Dict[str, Any]
+    # Hold the 'ProfileOrchestrator" instance (maybe change 'ProfileOrchestrator' to better name)
+    assessor: Any | None = None

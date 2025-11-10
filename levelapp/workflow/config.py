@@ -7,6 +7,11 @@ from levelapp.endpoint.client import EndpointConfig
 from levelapp.core.schemas import WorkflowType, RepositoryType, EvaluatorType
 
 
+# TODO-0: This whole configuration schema needs to be adjusted!!
+# 1. Split the sections into the different modules: ASSESSOR, COMPARATOR, SIMULATOR
+# 2. Keep the 'PROCESS', 'REPOSITORY', and 'ENDPOINT' as is.
+# 3. The workflow type (workflow_type: SIMULATOR) will decide which module/modules will be configured.
+# 4. Each module section will contain its own configuration separately.
 class ProcessConfig(BaseModel):
     project_name: str
     workflow_type: WorkflowType
@@ -33,6 +38,22 @@ class RepositoryConfig(BaseModel):
         extra = "allow"
 
 
+class AssessorConfig(BaseModel):
+    """
+    Configuration for the Assessor module.
+    Defines how performance profiles and metric evaluations are aggregated.
+    """
+    profile_targets: List[str] = Field(default_factory=list)
+    metrics: List[str] = Field(default_factory=list)
+    aggregation_strategy: str = Field(default="WEIGHTED_AVERAGE")
+    weights: Dict[str, float] = Field(default_factory=dict)
+    output_format: str = Field(default="JSON")
+    save_path: str | None = Field(default=None)
+
+    class Config:
+        extra = "allow"
+
+
 class WorkflowConfig(BaseModel):
     """
     Static workflow configuration. Maps directly to YAML sections.
@@ -43,6 +64,7 @@ class WorkflowConfig(BaseModel):
     evaluation: EvaluationConfig
     reference_data: ReferenceDataConfig
     repository: RepositoryConfig
+    assessor: AssessorConfig | None = None  # for backward compatibility (for now)
 
     class Config:
         extra = "allow"

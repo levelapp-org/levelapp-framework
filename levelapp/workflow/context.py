@@ -1,6 +1,7 @@
 """levelapp/workflow/context.py: Builds runtime WorkflowContext from WorkflowConfig."""
-from typing import Dict, Callable
+from typing import Dict, Callable, Any
 
+from levelapp.assessor.builder import ProfileBuilder
 from levelapp.repository.filesystem import FileSystemRepository
 from levelapp.workflow.config import WorkflowConfig
 from levelapp.core.base import BaseRepository, BaseEvaluator
@@ -29,6 +30,17 @@ class WorkflowContextBuilder:
             EvaluatorType.REFERENCE: lambda cfg: MetadataEvaluator(config=cfg),
         }
 
+    def _build_assessor(self) -> Any | None:  # TODO-0: Replace any with 'ProfileOrchestrator'
+        if not self.config.assessor or self.config.process.workflow_type != "ASSESSOR":
+            return None
+
+        profile_builder = ProfileBuilder(self.config)
+        profile = profile_builder.build_profile()
+        profile_builder.save_profile(profile)
+
+        orchestrator = None  # ProfileOrchestrator(config=self.config, profile=profile)
+        return orchestrator
+
     def build(self) -> WorkflowContext:
         """
         Build a runtime WorkflowContext from the static WorkflowConfig.
@@ -47,6 +59,8 @@ class WorkflowContextBuilder:
         providers = self.config.evaluation.providers
         endpoint_config = self.config.endpoint
 
+        assessor = self._build_assessor()
+
         # Inputs include reference data path or in-memory dict
         inputs = {}
         if self.config.reference_data.data:
@@ -61,4 +75,5 @@ class WorkflowContextBuilder:
             providers=providers,
             endpoint=endpoint_config,
             inputs=inputs,
+            assessor=assessor,
         )
