@@ -40,14 +40,13 @@ class ProfileBuilder:
         self.registry = registry
         self.available_profiles: Dict[str, ProfileTemplate] = self._load_predefined_profiles()
         self.strategy_map: Dict[str, BaseStrategy] = {}
-        self.metric_map: Dict[str, MetricSpec] = {}
+        self.metric_map: Dict[str, List[MetricSpec]] = {}
 
     def build(
             self,
             profile_name: str,
-            config: Dict[str, Any] | None = None,
             overrides: Dict[str, Any] | None = None
-    ) -> ProfileCard:
+    ) -> ProfileCard:  # Issue0 - Expected type 'ProfileCard', got 'ProfileCard | None' instead
         """
         Assemble the strategies and metrics into a complete ProfileCard.
         """
@@ -57,13 +56,13 @@ class ProfileBuilder:
         template = self.available_profiles[profile_name]
         profile_config: Dict[str, Any] = {}
 
-        for level, name in template.strategies.items():
+        for level, name in template.strategies.items():  # Issue1 - Missing return statement on some paths
             strategy_cls = self.registry.get_strategy(level=level, name=name)
 
             if not strategy_cls:
                 raise ValueError(f"[ProfileBuilder] Strategy '{level}' is not defined.")
 
-            strategy = strategy_cls(name=name, config=config)
+            strategy = self.registry.get_strategy(name=name, level=level)
             self.strategy_map[level] = strategy
 
             metrics = self.attach_metrics(strategy)
@@ -75,28 +74,28 @@ class ProfileBuilder:
                 "metrics": [m.model_dump() if hasattr(m, "model_dump") else m for m in metrics]
             }
 
-            # Apply overrides (user-provided)
-            if overrides:
-                for k, v in overrides.items():
-                    profile_config[k] = {**profile_config.get(k, {}), **v}
+        # Apply overrides (user-provided)
+        if overrides:
+            for k, v in overrides.items():
+                profile_config[k] = {**profile_config.get(k, {}), **v}
 
-            # Construct ProfileCard
-            card = ProfileCard(
-                name=template.name,
-                description=template.description,
-                config={
-                    **profile_config,
-                    "aggregation_strategy": template.aggregation_strategy,
-                    "weights": template.weights,
-                },
-                aggregation_strategy=template.aggregation_strategy,
-                weights=template.weights,
-            )
+        # Construct ProfileCard
+        card = ProfileCard(
+            name=template.name,
+            description=template.description,
+            config={
+                **profile_config,
+                "aggregation_strategy": template.aggregation_strategy,
+                "weights": template.weights,
+            },
+            aggregation_strategy=template.aggregation_strategy,
+            weights=template.weights,
+        )
 
-            self.validate_profile(card)
-            logger.info(f"[ProfileBuilder] Profile '{profile_name}' built successfully.")
+        self.validate_profile(card)
+        logger.info(f"[ProfileBuilder] Profile '{profile_name}' built successfully.")
 
-            return card
+        return card
 
     def attach_metrics(self, strategy: BaseStrategy) -> List[MetricSpec]:
         """
@@ -104,7 +103,7 @@ class ProfileBuilder:
         The registry holds metric suites per level.
         """
         try:
-            metric_suite = self.registry.resolve_metrics(strategy.level)
+            metric_suite = self.registry.resolve_metrics(level=strategy.level, name=strategy.name)
 
             if not metric_suite:
                 logger.debug(f"[ProfileBuilder] No metrics found for strategy '{strategy.level}'.")
