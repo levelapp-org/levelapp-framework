@@ -207,3 +207,64 @@ class AssessmentOrchestrator:
         )
 
         return profile_result
+
+    async def run_user_system(
+            self,
+            documents: List[Dict[str, Any]],
+            query: str | None = None
+    ) -> PipelineResult:
+        """
+        Call the user system endpoint.
+        """
+        logger.debug("[AssessmentOrchestrator] Running user system]")
+        request_payload = {
+            "query": query,
+            "documents": documents,
+        }
+        profile_card = ProfileCard(
+            name="user_system",
+            config={"request_payload": request_payload}
+        )
+
+        response_details: Dict[str, Any] = {}
+        response = None
+
+        try:
+            # TODO-3: We need to account for the case where the user system accepts a URL or raw text as documents.
+
+            response = await self.endpoint_cm.send_request(
+                endpoint_config=self.endpoint_config,
+                context=request_payload,
+            )
+
+            if response is None:
+                logger.error("[AssessmentOrchestrator] No response received from user system")
+                return PipelineResult(profile_card=profile_card)
+
+            if response.status_code != 200:
+                logger.error(f"[AssessmentOrchestrator] Request failed with status: {response.status_code}")
+                result = PipelineResult(profile_card=profile_card,)
+
+            mappings = self.endpoint_config.response_mapping
+            response_details = self.endpoint_cm.extract_response_data(
+                response=response,
+                mappings=mappings,
+            )
+
+        except asyncio.TimeoutError:
+            logger.exception("[AssessmentOrchestrator] User system call timed out.")
+
+        except Exception as e:
+            logger.exception(f"[AssessmentOrchestrator] Exception calling user system:\n{e}")
+
+        finally:
+        # TODO-4: We need to extract a 'list[Documents]' from the response content.
+        # TODO-4: Or change the 'retrieved_docs' type to something more flexible (e.g., Dict[Any, Any]
+            result = PipelineResult(
+                profile_card=profile_card,
+                retrieved_docs=response_details.get("retrieved_docs", {}),
+                augmented_answer=response_details.get("augmented_answer", ""),
+                # TODO-5: maybe we add the raw response here.
+            )
+
+        return result
