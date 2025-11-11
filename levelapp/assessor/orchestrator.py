@@ -268,3 +268,100 @@ class AssessmentOrchestrator:
             )
 
         return result
+
+    async def _evaluate_both(self, profile_result: PipelineResult, user_result: PipelineResult, profile_card: ProfileCard) -> None:
+        """
+        Use dedicated gaugers to evaluate retrieval/embedding/generation stages for both profile_result and user_result.
+        Mutates PipelineResult.metrics with per-stage metric lists and aggregated score.
+        """
+        embedding_gauger = self.embedding_gauger()
+        retrieval_gauger = self.retrieval_gauger()
+        generation_gauger = self.generation_gauger()
+
+        async def eval_retrieval(pr: PipelineResult, label: str):
+            try:
+                summary = retrieval_gauger.evaluate(  # TODO-5: Implement the 'evaluate' meth (no sh**t!)
+                    # I don't like this ..
+                    expected_docs=[d for d in profile_card.config.get("reference_docs", [])],
+                    actual_docs=pr.retrieved_docs, query=profile_card.name
+                )
+                pr.metrics["retrieval"] = summary.model_dump() if hasattr(summary, "model_dump") else summary
+            except Exception as e:
+                logger.exception("Retrieval gauger failed for %s: %s", label, e)
+                pr.metrics["retrieval"] = {"error": str(e)}
+
+        async def eval_generation(pr: PipelineResult, label: str):
+            try:
+                if pr.augmented_answer:
+                    summary = generation_gauger.evaluate(query=profile_card.name, generated=pr.augmented_answer, context_docs=pr.retrieved_docs)
+                    pr.metrics["generation"] = summary.model_dump() if hasattr(summary, "model_dump") else summary
+                else:
+                    pr.metrics["generation"] = {"skipped": True}
+            except Exception as e:
+                logger.exception("Generation gauger failed for %s: %s", label, e)
+                pr.metrics["generation"] = {"error": str(e)}
+
+        await asyncio.gather(
+            eval_retrieval(profile_result, "profile"),
+            eval_generation(profile_result, "profile"),
+            eval_retrieval(user_result, "user"),
+            eval_generation(user_result, "user"),
+        )
+
+        try:
+            if profile_card.config.get("check_embeddings", False):
+                e_summary_profile = embedding_gauger.evaluate(expected_docs=[], actual_docs=profile_result.retrieved_docs, query=profile_card.name)
+                profile_result.metrics["embedding"] = e_summary_profile.model_dump() if hasattr(e_summary_profile, "model_dump") else e_summary_profile
+
+                e_summary_user = embedding_gauger.evaluate(expected_docs=[], actual_docs=user_result.retrieved_docs, query=profile_card.name)
+                user_result.metrics["embedding"] = e_summary_user.model_dump() if hasattr(e_summary_user, "model_dump") else e_summary_user
+        except Exception as e:
+            logger.exception("Embedding gauger failed: %s", e)
+
+        profile_result.metrics["aggregated"] = self.aggregate_scores(profile_result.metrics, profile_card)
+        user_result.metrics["aggregated"] = self.aggregate_scores(user_result.metrics, profile_card)
+
+    # TODO-5: Refactor this piece of sh**t method to reduce the complexity.
+    def aggregate_scores(self, metrics_blob: Dict[str, Any], profile_card: ProfileCard) -> Dict[str, float]:
+        """
+        Aggregate per-scope metrics (retrieval/generation/embedding) using profile weights.
+        Returns a dict of aggregated values (per-scope and global).
+        """
+        weights = profile_card.config.get("weights", {})
+        strategy = profile_card.config.get("aggregation_strategy", "weighted")
+
+        # collect numeric scores (we expect each scope metrics to contain 'avg_score' or similar)
+        scope_scores: Dict[str, float] = {}
+        for scope in ("retrieval", "generation", "embedding"):
+            data = metrics_blob.get(scope)
+            if not data:
+                continue
+            # metric normalization heuristics
+            if isinstance(data, dict) and "report" in data:
+                score = data["report"].get("avg_score") if isinstance(data["report"], dict) else None
+            else:
+                score = None
+
+            # fallback tries
+            score = float(score) if score is not None else 0.0
+            scope_scores[scope] = score
+
+        # aggregation
+        if strategy == "weighted":
+            total = 0.0
+            for s, sc in scope_scores.items():
+                w = float(weights.get(s, 1.0))  # default weight 1.0
+                total += sc * w
+            # normalize by sum of weights to produce 0..1-like metric
+            weights_sum = sum(float(weights.get(s, 1.0)) for s in scope_scores.keys()) or 1.0
+            global_score = total / weights_sum
+        else:
+            # simple average
+            if scope_scores:
+                global_score = sum(scope_scores.values()) / len(scope_scores)
+            else:
+                global_score = 0.0
+
+        return {"global": float(global_score), "by_scope": scope_scores}
+
+    # I am tired boss..
