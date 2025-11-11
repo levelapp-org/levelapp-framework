@@ -1,134 +1,209 @@
 """levelapp/assessor/orchestrator.py"""
-import uuid
+from __future__ import annotations
 
-from typing import List, Dict, Any
+import asyncio
+import logging
 
-from levelapp.assessor.gauger import ProfileGauger
+from dataclasses import dataclass, field
+from typing import Dict, Any, List
+
+from levelapp.assessor.builder import ProfileBuilder
+from levelapp.assessor.gauger import EmbeddingGauger, RetrievalGauger, GenerationGauger
 from levelapp.assessor.registry import StrategyRegistry
-from levelapp.assessor.schemas import Document, PipelineResult
+from levelapp.assessor.schemas import Document
+from levelapp.endpoint.client import EndpointConfig
+from levelapp.endpoint.manager import EndpointConfigManager
 
 
-class ProfileOrchestrator:
-    def __init__(self, registry: StrategyRegistry, endpoint=None):
-        self._registry = registry
-        self._endpoint = endpoint
+logger = logging.getLogger(__name__)
 
-    async def run_profile(
+
+@dataclass
+class ProfileCard:
+    name: str
+    config: Dict[str, Any]
+
+
+@dataclass
+class PipelineResult:
+    profile_card: ProfileCard
+    retrieved_docs: List[Document] = field(default_factory=list)
+    augmented_answer: str | None = None
+    metrics: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AssessmentResults:
+    profile_results: PipelineResult
+    user_result: PipelineResult
+    errors: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ComparisonSummary:
+    profile_aggregated: Dict[str, float]
+    user_aggregated: Dict[str, float]
+    delta: Dict[str, float]
+
+
+class AssessmentOrchestrator:
+    """
+    Orchestrator that:
+      - sets up the endpoint configuration for the user's system
+      - builds a profile via ProfileBuilder
+      - runs the predefined profile pipeline and the user's system in parallel
+      - evaluates both outputs using gaugers and aggregates results
+    """
+
+    DEFAULT_TIMEOUT = 30.0
+
+    def __init__(
             self,
-            profile_name: str,
-            query: str,
-            documents: List[Document],
-            profile_config: Dict[str, Any],
+            endpoint_config: EndpointConfig,
+            registry: StrategyRegistry | None = None,
+            embedding_gauger_cls=EmbeddingGauger,
+            retrieval_gauger_cls=RetrievalGauger,
+            generation_gauger_cls=GenerationGauger,
+            timeout: float | None = None,
+    ) -> None:
+        self.endpoint_config = endpoint_config
+        self.endpoint_cm = EndpointConfigManager()
+        self.registry = registry or StrategyRegistry()
+        self.embedding_gauger = embedding_gauger_cls
+        self.retrieval_gauger = retrieval_gauger_cls
+        self.generation_gauger = generation_gauger_cls
+        self.timeout = timeout or self.DEFAULT_TIMEOUT
+
+        # runtime attributes
+        self._profile_card: ProfileCard | None = None
+        self._initialized = False
+
+    def setup(self, endpoint_config: EndpointConfig) -> None:
+        self.endpoint_config = endpoint_config
+
+        if not self.endpoint_cm:
+            self.endpoint_cm = EndpointConfigManager()
+
+        self.endpoint_cm.set_endpoints(endpoints_config=[endpoint_config])
+        self._initialized = True
+        print(f"[AssessmentOrchestrator] Endpoint configured: '{endpoint_config.name}'")
+
+    def build_profile(self, profile_name: str, profile_config: Dict[str, Any] | None = None):
+        """
+        Build a 'ProfileCard' using 'ProfileBuilder' and 'StrategyRegistry'.
+        """
+        print(f"[AssessmentOrchestrator] Building profile '{profile_name}'")
+
+        builder = ProfileBuilder(registry=self.registry)
+
+        # TODO-0: We need to find out how to pass the profile configuration to the builder.
+        profile = builder.build(profile_name=profile_name)
+
+        if isinstance(profile_config, ProfileCard):
+            card = profile
+
+        else:
+            card = ProfileCard(name=profile_name, config=profile_config)
+
+        self._profile_card = card
+        logger.debug(f"[AssessmentOrchestrator] Profile build: '{card}'")
+
+        return card
+
+    async def run_evaluation(
+            self,
+            profile_card: ProfileCard,
+            documents: List[Dict[str, Any]],
+            query: str | None = None,
+    ) -> AssessmentResults:
+        """
+        Run the predefined profile pipeline and the user's system in parallel,
+        evaluate both, and return results
+        """
+        if not self._initialized:
+            try:
+                self.setup(endpoint_config=self.endpoint_config)
+            except Exception as e:
+                raise RuntimeError(f"[AssessmentOrchestrator] not initialized and auto-setup failed:\n{e}]")
+
+        errors: List[str] = []
+        profile_task = asyncio.create_task(
+            self._run_profile_pipeline(profile_card, documents, query)
+        )
+        user_task = asyncio.create_task(
+            self._run_user_system(documents, query)
+        )
+
+        try:
+            profile_result, user_result = await asyncio.gather(profile_task, user_task)
+
+        except Exception as e:
+            logger.exception(f"[AssessmentOrchestrator] Parallel execution of profile/user pipeline failed:\n{e}]")
+
+            for t in (profile_task, user_task):
+                if not t.done():
+                    t.cancel()
+
+            raise
+
+        try:
+            await self._evaluate_both(profile_result, user_result, profile_card)
+
+        except Exception as e:
+            logger.exception(f"[AssessmentOrchestrator] Evaluation failed:\n{e}]")
+            errors.append(str(e))
+
+        return AssessmentResults(
+            profile_results=profile_result,
+            user_result=user_result,
+            errors=errors,
+        )
+
+    async def _run_profile_pipeline(
+            self,
+            profile_card: ProfileCard,
+            documents: List[Dict[str, Any]],
+            query: str | None = None,
     ) -> PipelineResult:
         """
-        Executes a single profile configuration.
-        Example structure of profile_config:
-        {
-            "chunking": {"name": "semantic", "config": {"chunk_size": 300}},
-            "embedding": {"name": "transformer", "config": {"model": "all-MiniLM-L6-v2"}},
-            "retrieval": {"name": "faiss", "config": {"top_k": 5}},
-            "generation": {"name": "llm_openai", "config": {"model": "gpt-4o-mini"}},
-        }
+        Run the profile's pipeline using local strategies resolved from registry.
         """
-        pipeline_id = str(uuid.uuid4())
+        logger.debug(f"[AssessmentOrchestrator] Running profile pipeline: '{profile_card}'")
 
-        chunker = self._build_strategy("chunking", profile_config)
-        embedding = self._build_strategy("embedding", profile_config)
-        retrieval = self._build_strategy("retrieval", profile_config)
-        generator = self._build_strategy("generation", profile_config)
+        cfg = profile_card.config
+        chunker_cfg = cfg.get("chunker", {})
+        embedder_cfg = cfg.get("embedder", {})
+        retriever_cfg = cfg.get("retriever", {})
+        generator_cfg = cfg.get("generator", {})
 
-        all_chunks = []
+        chunker_cls = self.registry.get_strategy(level="chunking", name=chunker_cfg.get("name"))
+        chunker = chunker_cls(name=chunker_cfg.get("name"), config=chunker_cfg.get("config", {}))
+        embedder_cls = self.registry.get_strategy(level="embedder", name=embedder_cfg.get("name"))
+        embedder = embedder_cls(name=embedder_cfg.get("name"), config=embedder_cls.get("config", {}))
+        retriever_cls = self.registry.get_strategy(level="retriever", name=retriever_cfg.get("name"))
+        retriever = retriever_cls(name=retriever_cfg.get("name"), config=embedder_cfg.get("config", {}))
+        generator_cls = self.registry.get_strategy(level="generator", name=generator_cfg.get("name"))
+        generator = generator_cls(name=generator_cfg.get("name"), config=generator_cfg.get("config", {}))
+
+        # TODO-1: Maybe we can create a 'Chunk' model later?
+        all_chunks: List[Dict[str, Any]] = []
+
+        # TODO-2: Optionally, we can construct a pipeline to run the whole process in a clean way.
         for doc in documents:
-            chunks = await chunker.run(doc)
+            chunks = await chunker.run(doc) if asyncio.iscoroutine(doc) else chunker.run(doc)
             all_chunks.extend(chunks)
 
-        embeddings = await embedding.run(all_chunks)
-        retrieved_docs = await retrieval.run(query, embeddings)
+        embedding = await embedder.run(all_chunks) if asyncio.iscoroutine(all_chunks) else embedder.run(all_chunks)
+        retrieved_docs = await retriever.run(embedding) if asyncio.iscoroutine(embedding) else embedder.run(embedding)
 
-        gauger = ProfileGauger()
-        evaluated_results = await gauger.evaluate_profile(
-            pipeline_result=PipelineResult(
-                pipeline_id=pipeline_id,
-                strategies={
-                    "profile": profile_name,
-                    "chunking": chunker.name,
-                    "embedding": embedding.name,
-                    "retrieval": retrieval.name,
-                    "generation": generator.name if generator else None,
-                },
-                retrieved_docs=retrieved_docs,
-                augmented_answer=None,
-            ),
-            expected_docs=documents,
-        )
-
+        generated = None
         if generator:
-            generated_answer = await generator.run(query, retrieved_docs)
-            evaluated_results.augmented_answer = generated_answer
+            generated = await generator.run(embedding) if asyncio.iscoroutine(embedding) else generator.run(embedding)
 
-        return evaluated_results
-
-    def _build_strategy(self, strategy_type: str, profile_config: Dict[str, Any], optional: bool = False):
-        """Builds a strategy instance from registry + profile config."""
-        strat_data = profile_config.get(strategy_type)
-
-        if not strat_data:
-            if optional:
-                return None
-            raise ValueError(f"[ProfileOrchestrator] Missing required config for '{strategy_type}' in profile")
-
-        name = strat_data.get("name")
-        config = strat_data.get("config", {})
-        strategy_cls = self._registry.get(strategy_type=strategy_type, name=name)
-
-        return strategy_cls(name=name, config=config)
-
-
-if __name__ == '__main__':
-    import asyncio
-
-    from levelapp.assessor.strategies.chunking import SimpleChunkingStrategy
-    from levelapp.assessor.strategies.embedding import MockEmbeddingStrategy
-    from levelapp.assessor.strategies.retrieval import CosineRetrievalStrategy
-    from levelapp.assessor.strategies.generation import MockGenerationStrategy
-
-    registry = StrategyRegistry()
-    registry.register("chunking", "simple", SimpleChunkingStrategy)
-    registry.register("embedding", "mock", MockEmbeddingStrategy)
-    registry.register("retrieval", "cosine", CosineRetrievalStrategy)
-    registry.register("generation", "mock", MockGenerationStrategy)
-
-    orchestrator = ProfileOrchestrator(registry=registry, endpoint=None)
-
-    # === Example profile config ===
-    basic_profile = {
-        "chunking": {"name": "simple", "config": {"chunk_size": 300}},
-        "embedding": {"name": "mock", "config": {}},
-        "retrieval": {"name": "cosine", "config": {"top_k": 5}},
-        "generation": {"name": "mock", "config": {}},
-    }
-
-    query_ = "What is the role of mitochondria?"
-    documents_ = [
-        Document(
-            id="0001",
-            content="Mitochondria are the powerhouses of the cell. They produce ATP.",
-            source_type="document",
-        ),
-        Document(
-            id="0002",
-            content="Cells contain various organelles including mitochondria and ribosomes.",
-            source_type="document",
-        ),
-    ]
-
-    results = asyncio.run(
-        orchestrator.run_profile(
-            profile_name="basic",
-            query=query_,
-            documents=documents_,
-            profile_config=basic_profile,
+        profile_result = PipelineResult(
+            profile_card=profile_card,
+            retrieved_docs=retrieved_docs,
+            augmented_answer=generated,
         )
-    )
 
-    print(results.model_dump_json(indent=2))
+        return profile_result
