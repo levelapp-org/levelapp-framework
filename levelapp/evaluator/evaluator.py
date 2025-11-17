@@ -282,12 +282,14 @@ class MetadataEvaluator(BaseEvaluator):
 
             if score is None:
                 results[field] = -1
+                continue
 
-                try:
-                    results[field] = int(score[0]) if isinstance(score, list) else int(score)
+            try:
+                val = score[0] if isinstance(score, list) else score
+                results[field] = float(val)
 
-                except (TypeError, ValueError):
-                    results[field] = -1
+            except (TypeError, ValueError):
+                results[field] = -1
 
         return results
 

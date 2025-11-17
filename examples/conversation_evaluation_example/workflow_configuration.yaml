@@ -2,7 +2,7 @@ process:
   project_name: "chatbot-evaluation"
   workflow_type: SIMULATOR  # Must be SIMULATOR for conversation testing
   evaluation_params:
-    attempts: 3
+    attempts: 1
     batch_size: 10
 
 evaluation:
@@ -14,22 +14,35 @@ evaluation:
     - ionos
   metrics_map:
     appointment_type: EXACT
-    date: LEVENSHTEIN
-    time: TOKEN_BASED
+    appointment_date: TOKEN_BASED
+    doctor_name: TOKEN_BASED
 
 reference_data:
   path: "conversation_script.json"
   data: {}
 
 endpoint:
+  name: example
   base_url: "http://127.0.0.1:8000"
-  url_path: "chat"
-  api_key: ""
-  bearer_token: ""
-  default_request_payload_template:
-    message: "${user_message}"
-  default_response_payload_template:
-    agent_reply: "${reply}"
+  path: "chat"
+  method: POST
+  timeout: 60
+  retry_count: 3
+  retry_backoff: 0.5
+  headers:
+    - name: Content-type
+      value: application/json
+      secure: false
+  request_schema:
+    - field_path: message
+      value: user_message
+      value_type: dynamic
+      required: true
+  response_mapping:
+    - field_path: reply_text
+      extract_as: agent_reply
+    - field_path: metadata
+      extract_as: metadata
 
 repository:
   type: FIRESTORE # Keep this value as if for now.
