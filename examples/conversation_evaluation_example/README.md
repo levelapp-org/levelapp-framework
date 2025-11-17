@@ -10,7 +10,7 @@ It leverages LLM-as-a-judge for qualitative scoring and supports quantitative me
 <br>
 <figure>
     <img 
-    src="../docs/media/simulator-module-diagram.PNG"
+    src="../../docs/media/simulator-module-diagram.PNG"
     alt="Sequence Diagram">
     <figcaption>Fig.1 - Simulator Module Diagram</figcaption>
 </figure>
@@ -67,7 +67,7 @@ The Simulator Module simulates conversations by:
 
 <figure>
     <img 
-    src="../docs/media/simulator-sequence-diagram.png"
+    src="../../docs/media/simulator-sequence-diagram.png"
     alt="Sequence Diagram">
     <figcaption>Fig.2 - Conversation Simulator Sequence Diagram</figcaption>
 </figure>

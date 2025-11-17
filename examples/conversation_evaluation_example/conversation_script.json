@@ -1,0 +1,38 @@
+{
+  "scripts": [
+    {
+      "interactions": [
+        {
+          "user_message_path": "",
+          "user_message": "Hello, I need information on your medical services.",
+          "reference_reply": "We offer a variety of dental services including routine check-ups, surgical procedures, and restorative treatments. If you have specific questions or need to book an appointment, feel free to ask!",
+          "interaction_type": "initial",
+          "reference_metadata": {},
+          "guardrail_flag": false
+        },
+        {
+          "user_message_path": "",
+          "user_message": "I want to book an appointment next Monday to remove my wisdom tooth",
+          "reference_reply": "Your SURGICAL appointment with Dr. Trafalgar D. Water Law is booked for 2023-10-30.",
+          "interaction_type": "intermediate",
+          "reference_metadata": {
+            "appointment_type": "SURGICAL",
+            "appointment_date": "2023-10-30",
+            "doctor_name": "Dr. Trafalgar D. Water Law"
+            },
+          "guardrail_flag": false
+        },
+        {
+          "user_message_path": "",
+          "user_message": "Do I need to do any paperwork beforehand?",
+          "reference_reply": "Yes, we recommend completing any necessary paperwork before your appointment to ensure a smooth visit. You can usually find the forms on our website or arrive a bit early to fill them out at the clinic.",
+          "interaction_type": "final",
+          "reference_metadata": {},
+          "guardrail_flag": false
+        }
+      ],
+      "description": "Doctor booking flow",
+      "details": {"context": "Medical chatbot"}
+    }
+  ]
+}
