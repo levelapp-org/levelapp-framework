@@ -280,6 +280,6 @@ if __name__ == '__main__':
     # List available profiles
     print("Available profiles:", builder.list_available_profiles())
 
-    # # Build a profile
-    # profile_card = builder.build(profile_name="quality")
-    # print(f"Built profile: {profile_card.name}")
+    # Build a profile
+    profile_card = builder.build(profile_name="quality")
+    print(f"Built profile: {profile_card.name}")
