@@ -2,366 +2,229 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
+from enum import Enum
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, Any, List
+from typing import List, Dict, Any, AsyncGenerator
+from pydantic import BaseModel, ConfigDict
 
-from levelapp.assessor.builder import ProfileBuilder
-from levelapp.assessor.gauger import EmbeddingGauger, RetrievalGauger, GenerationGauger
-from levelapp.assessor.registry import StrategyRegistry
-from levelapp.assessor.schemas import Document
-from levelapp.endpoint.client import EndpointConfig
-from levelapp.endpoint.manager import EndpointConfigManager
-
-
-logger = logging.getLogger(__name__)
+from levelapp.assessor.builder import ProfileBuilder, ProfileCard
+from levelapp.assessor.registry import StrategyRegistry, BaseStrategy
+from levelapp.assessor.schemas import Document, MetricSpec
+from levelapp.aspects.logger import logger
 
 
-@dataclass
-class ProfileCard:
-    name: str
-    config: Dict[str, Any]
+class EvaluationStatus(Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELED = "canceled"
 
 
-@dataclass
+@dataclass(frozen=True)
+class EvaluationRequest:
+    """Immutable request for evaluation."""
+    profile_name: str
+    user_system_endpoint: str
+    test_queries: List[str]
+    evaluation_metrics: List[str] = field(default_factory=list)
+    max_retries: int = 3
+    timeout_seconds: int = 300
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StrategyOutput:
+    """Standardized output from strategy execution."""
+    level: str
+    strategy_name: str
+    output: Any
+    execution_time: float
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class PipelineResult:
+    """Complete result from running a RAG pipeline."""
+    query: str
+    strategy_outputs: Dict[str, StrategyOutput]  # level -> output
+    final_answer: str
+    source_documents: List[Document]
+    total_execution_time: float
+    success: bool = True
+    error: str | None = None
+
+
+@dataclass
+class EvaluationResult:
+    """Result for a single query evaluation."""
+    query: str
+    profile_result: PipelineResult
+    user_system_result: PipelineResult
+    metric_scores: Dict[str, float]  # metric_name -> score
+    comparison_results: Dict[str, Any]
+
+
+class EvaluationReport(BaseModel):
+    """Comprehensive evaluation report."""
+    model_config = ConfigDict(frozen=True)
+
+    evaluation_id: str
+    status: EvaluationStatus
     profile_card: ProfileCard
-    retrieved_docs: List[Document] = field(default_factory=list)
-    augmented_answer: str | None = None
-    metrics: Dict[str, Any] = field(default_factory=dict)
+    evaluation_request: EvaluationRequest
+    results: List[EvaluationResult]
+    summary_metrics: Dict[str, float]
+    execution_time: float
 
 
-@dataclass
-class AssessmentResults:
-    profile_results: PipelineResult
-    user_result: PipelineResult
-    errors: List[str] = field(default_factory=list)
+class EvaluationGauger(ABC):
+    """Abstract base for evaluation metrics calculators."""
 
-
-@dataclass
-class ComparisonSummary:
-    profile_aggregated: Dict[str, float]
-    user_aggregated: Dict[str, float]
-    delta: Dict[str, float]
-
-
-class AssessmentOrchestrator:
-    """
-    Orchestrator that:
-      - sets up the endpoint configuration for the user's system
-      - builds a profile via ProfileBuilder
-      - runs the predefined profile pipeline and the user's system in parallel
-      - evaluates both outputs using gaugers and aggregates results
-    """
-
-    DEFAULT_TIMEOUT = 30.0
-
-    def __init__(
+    @abstractmethod
+    async def calculate(
             self,
-            endpoint_config: EndpointConfig,
-            registry: StrategyRegistry | None = None,
-            embedding_gauger_cls=EmbeddingGauger,
-            retrieval_gauger_cls=RetrievalGauger,
-            generation_gauger_cls=GenerationGauger,
-            timeout: float | None = None,
-    ) -> None:
-        self.endpoint_config = endpoint_config
-        self.endpoint_cm = EndpointConfigManager()
-        self.registry = registry or StrategyRegistry()
-        self.embedding_gauger = embedding_gauger_cls
-        self.retrieval_gauger = retrieval_gauger_cls
-        self.generation_gauger = generation_gauger_cls
-        self.timeout = timeout or self.DEFAULT_TIMEOUT
+            profile_result: PipelineResult,
+            user_system_result: PipelineResult,
+            query: str
+    ) -> Dict[str, float]:
+        """Calculate metrics for comparison"""
+        pass
 
-        # runtime attributes
-        self._profile_card: ProfileCard | None = None
-        self._initialized = False
+    @property
+    @abstractmethod
+    def supported_metrics(self) -> List[str]:
+        """List of metrics this gauger supports."""
+        pass
 
-    def setup(self, endpoint_config: EndpointConfig) -> None:
-        self.endpoint_config = endpoint_config
 
-        if not self.endpoint_cm:
-            self.endpoint_cm = EndpointConfigManager()
+class PipelineExecutor:
+    """Executes a complete RAG pipeline using configured strategies."""
+    def __init__(self, profile_card: ProfileCard, registry: StrategyRegistry):
+        self.profile_card = profile_card
+        self.registry = registry
+        self._initialized_strategies: Dict[str, BaseStrategy] = {}
 
-        self.endpoint_cm.set_endpoints(endpoints_config=[endpoint_config])
-        self._initialized = True
-        print(f"[AssessmentOrchestrator] Endpoint configured: '{endpoint_config.name}'")
+    async def initialize(self) -> None:
+        """Initialize all strategies in the pipeline."""
+        logger.info(f"[PipelineExecutor] Initializing pipeline for profile: {self.profile_card.name}")
 
-    def build_profile(self, profile_name: str, profile_config: Dict[str, Any] | None = None):
-        """
-        Build a 'ProfileCard' using 'ProfileBuilder' and 'StrategyRegistry'.
-        """
-        print(f"[AssessmentOrchestrator] Building profile '{profile_name}'")
+        for level_name, level_config in self.profile_card.levels.items():
+            strategy = self.registry.get_strategy(
+                level=level_name,
+                name=level_config.strategy_name,
+                config=level_config.strategy_config
+            )
+            await strategy.initialize()
+            self._initialized_strategies[level_name] = strategy
 
-        builder = ProfileBuilder(registry=self.registry)
+        logger.info(f"[PipelineExecutor] Pipeline initialized with {len(self._initialized_strategies)} strategies.")
 
-        # TODO-0: We need to find out how to pass the profile configuration to the builder.
-        profile = builder.build(profile_name=profile_name)
+    async def cleanup(self) -> None:
+        """Clean up all strategy resources."""
+        logger.info(f"[PipelineExecutor] Cleaning up pipeline strategies.")
 
-        if isinstance(profile_config, ProfileCard):
-            card = profile
-
-        else:
-            card = ProfileCard(name=profile_name, config=profile_config)
-
-        self._profile_card = card
-        logger.debug(f"[AssessmentOrchestrator] Profile build: '{card}'")
-
-        return card
-
-    async def run_evaluation(
-            self,
-            profile_card: ProfileCard,
-            documents: List[Dict[str, Any]],
-            query: str | None = None,
-    ) -> AssessmentResults:
-        """
-        Run the predefined profile pipeline and the user's system in parallel,
-        evaluate both, and return results
-        """
-        if not self._initialized:
+        for strategy in self._initialized_strategies.values():
             try:
-                self.setup(endpoint_config=self.endpoint_config)
+                await strategy.cleanup()
+
             except Exception as e:
-                raise RuntimeError(f"[AssessmentOrchestrator] not initialized and auto-setup failed:\n{e}]")
+                logger.warning(f"[PipelineExecutor] Error cleaning up strategy '{strategy.name}':\n{e}")
 
-        errors: List[str] = []
-        profile_task = asyncio.create_task(
-            self._run_profile_pipeline(profile_card, documents, query)
-        )
-        user_task = asyncio.create_task(
-            self._run_user_system(documents, query)
-        )
+        self._initialized_strategies.clear()
 
-        try:
-            profile_result, user_result = await asyncio.gather(profile_task, user_task)
-
-        except Exception as e:
-            logger.exception(f"[AssessmentOrchestrator] Parallel execution of profile/user pipeline failed:\n{e}]")
-
-            for t in (profile_task, user_task):
-                if not t.done():
-                    t.cancel()
-
-            raise
+    async def execute(self, query: str) -> PipelineResult:
+        """Execute the complete RAG pipeline for a query."""
+        import time
+        start_time = time.perf_counter()
+        strategy_outputs: Dict[str, StrategyOutput] = {}
 
         try:
-            await self._evaluate_both(profile_result, user_result, profile_card)
+            # Execute chunking strategy
+            chunking_strategy = self._initialized_strategies["chunking"]
+            chunks = await self._execute_strategy("chunking", chunking_strategy, [Document(content=query)])  # hmmm? what if this is a URL or text?
 
-        except Exception as e:
-            logger.exception(f"[AssessmentOrchestrator] Evaluation failed:\n{e}]")
-            errors.append(str(e))
+            strategy_outputs["chunks"] = chunks
 
-        return AssessmentResults(
-            profile_results=profile_result,
-            user_result=user_result,
-            errors=errors,
-        )
+            # Execute embedding strategy
+            embedding_strategy = self._initialized_strategies["embedding"]
+            embeddings = await self._execute_strategy("embedding", embedding_strategy, chunks.output)
 
-    async def _run_profile_pipeline(
-            self,
-            profile_card: ProfileCard,
-            documents: List[Dict[str, Any]],
-            query: str | None = None,
-    ) -> PipelineResult:
-        """
-        Run the profile's pipeline using local strategies resolved from registry.
-        """
-        logger.debug(f"[AssessmentOrchestrator] Running profile pipeline: '{profile_card}'")
+            strategy_outputs["embeddings"] = embeddings
 
-        cfg = profile_card.config
-        chunker_cfg = cfg.get("chunker", {})
-        embedder_cfg = cfg.get("embedder", {})
-        retriever_cfg = cfg.get("retriever", {})
-        generator_cfg = cfg.get("generator", {})
+            # Execute retrieval strategy
+            retrieval_strategy = self._initialized_strategies["retrieval"]
+            retrieved_docs = await self._execute_strategy("retrieval", retrieval_strategy, query)
 
-        chunker_cls = self.registry.get_strategy(level="chunking", name=chunker_cfg.get("name"))
-        chunker = chunker_cls(name=chunker_cfg.get("name"), config=chunker_cfg.get("config", {}))
-        embedder_cls = self.registry.get_strategy(level="embedder", name=embedder_cfg.get("name"))
-        embedder = embedder_cls(name=embedder_cfg.get("name"), config=embedder_cls.get("config", {}))
-        retriever_cls = self.registry.get_strategy(level="retriever", name=retriever_cfg.get("name"))
-        retriever = retriever_cls(name=retriever_cfg.get("name"), config=embedder_cfg.get("config", {}))
-        generator_cls = self.registry.get_strategy(level="generator", name=generator_cfg.get("name"))
-        generator = generator_cls(name=generator_cfg.get("name"), config=generator_cfg.get("config", {}))
+            strategy_outputs["retrieved_docs"] = retrieved_docs
 
-        # TODO-1: Maybe we can create a 'Chunk' model later?
-        all_chunks: List[Dict[str, Any]] = []
+            # Execute generation strategy
+            generation_strategy = self._initialized_strategies["generation"]
+            augmented_answer = await self._execute_strategy("generation", generation_strategy, retrieved_docs.output)
 
-        # TODO-2: Optionally, we can construct a pipeline to run the whole process in a clean way.
-        for doc in documents:
-            chunks = await chunker.run(doc) if asyncio.iscoroutine(doc) else chunker.run(doc)
-            all_chunks.extend(chunks)
+            strategy_outputs["augmented_answer"] = augmented_answer
 
-        embedding = await embedder.run(all_chunks) if asyncio.iscoroutine(all_chunks) else embedder.run(all_chunks)
-        retrieved_docs = await retriever.run(embedding) if asyncio.iscoroutine(embedding) else embedder.run(embedding)
+            execution_time = time.perf_counter() - start_time
 
-        generated = None
-        if generator:
-            generated = await generator.run(embedding) if asyncio.iscoroutine(embedding) else generator.run(embedding)
-
-        profile_result = PipelineResult(
-            profile_card=profile_card,
-            retrieved_docs=retrieved_docs,
-            augmented_answer=generated,
-        )
-
-        return profile_result
-
-    async def run_user_system(
-            self,
-            documents: List[Dict[str, Any]],
-            query: str | None = None
-    ) -> PipelineResult:
-        """
-        Call the user system endpoint.
-        """
-        logger.debug("[AssessmentOrchestrator] Running user system]")
-        request_payload = {
-            "query": query,
-            "documents": documents,
-        }
-        profile_card = ProfileCard(
-            name="user_system",
-            config={"request_payload": request_payload}
-        )
-
-        response_details: Dict[str, Any] = {}
-        response = None
-
-        try:
-            # TODO-3: We need to account for the case where the user system accepts a URL or raw text as documents.
-
-            response = await self.endpoint_cm.send_request(
-                endpoint_config=self.endpoint_config,
-                context=request_payload,
+            return PipelineResult(
+                query=query,
+                strategy_outputs=strategy_outputs,
+                final_answer=augmented_answer.output,
+                source_documents=retrieved_docs.output if hasattr(retrieved_docs.output, '__iter__') else [],
+                total_execution_time=execution_time,
             )
 
-            if response is None:
-                logger.error("[AssessmentOrchestrator] No response received from user system")
-                return PipelineResult(profile_card=profile_card)
-
-            if response.status_code != 200:
-                logger.error(f"[AssessmentOrchestrator] Request failed with status: {response.status_code}")
-                result = PipelineResult(profile_card=profile_card,)
-
-            mappings = self.endpoint_config.response_mapping
-            response_details = self.endpoint_cm.extract_response_data(
-                response=response,
-                mappings=mappings,
-            )
-
-        except asyncio.TimeoutError:
-            logger.exception("[AssessmentOrchestrator] User system call timed out.")
-
         except Exception as e:
-            logger.exception(f"[AssessmentOrchestrator] Exception calling user system:\n{e}")
-
-        finally:
-        # TODO-4: We need to extract a 'list[Documents]' from the response content.
-        # TODO-4: Or change the 'retrieved_docs' type to something more flexible (e.g., Dict[Any, Any]
-            result = PipelineResult(
-                profile_card=profile_card,
-                retrieved_docs=response_details.get("retrieved_docs", {}),
-                augmented_answer=response_details.get("augmented_answer", ""),
-                # TODO-5: maybe we add the raw response here.
+            execution_time = time.perf_counter() - start_time
+            logger.error(f"[PipelineExecutor] Pipeline execution failed for query: '{query}'\nError:\n{e}")
+            return PipelineResult(
+                query=query,
+                strategy_outputs=strategy_outputs,
+                final_answer="",
+                source_documents=[],
+                total_execution_time=execution_time,
+                success=False,
+                error=str(e),
             )
 
-        return result
-
-    async def _evaluate_both(self, profile_result: PipelineResult, user_result: PipelineResult, profile_card: ProfileCard) -> None:
+    @staticmethod
+    async def _execute_strategy(level: str, strategy: BaseStrategy, *args, **kwargs) -> StrategyOutput:
         """
-        Use dedicated gaugers to evaluate retrieval/embedding/generation stages for both profile_result and user_result.
-        Mutates PipelineResult.metrics with per-stage metric lists and aggregated score.
+        Execute a single strategy with timing and error handling.
+
+        Args:
+            level (str): The level name.
+            strategy (BaseStrategy): The strategy to execute.
+            * args: extra arguments to pass to the strategy.
+            ** kwargs: extra keyword arguments to pass to the strategy.
+
+        Returns:
+            StrategyOutput: The output of the strategy.
         """
-        embedding_gauger = self.embedding_gauger()
-        retrieval_gauger = self.retrieval_gauger()
-        generation_gauger = self.generation_gauger()
-
-        async def eval_retrieval(pr: PipelineResult, label: str):
-            try:
-                summary = retrieval_gauger.evaluate(  # TODO-5: Implement the 'evaluate' meth (no sh**t!)
-                    # I don't like this ..
-                    expected_docs=[d for d in profile_card.config.get("reference_docs", [])],
-                    actual_docs=pr.retrieved_docs, query=profile_card.name
-                )
-                pr.metrics["retrieval"] = summary.model_dump() if hasattr(summary, "model_dump") else summary
-            except Exception as e:
-                logger.exception("Retrieval gauger failed for %s: %s", label, e)
-                pr.metrics["retrieval"] = {"error": str(e)}
-
-        async def eval_generation(pr: PipelineResult, label: str):
-            try:
-                if pr.augmented_answer:
-                    summary = generation_gauger.evaluate(query=profile_card.name, generated=pr.augmented_answer, context_docs=pr.retrieved_docs)
-                    pr.metrics["generation"] = summary.model_dump() if hasattr(summary, "model_dump") else summary
-                else:
-                    pr.metrics["generation"] = {"skipped": True}
-            except Exception as e:
-                logger.exception("Generation gauger failed for %s: %s", label, e)
-                pr.metrics["generation"] = {"error": str(e)}
-
-        await asyncio.gather(
-            eval_retrieval(profile_result, "profile"),
-            eval_generation(profile_result, "profile"),
-            eval_retrieval(user_result, "user"),
-            eval_generation(user_result, "user"),
-        )
+        import time
+        start_time = time.perf_counter()
 
         try:
-            if profile_card.config.get("check_embeddings", False):
-                e_summary_profile = embedding_gauger.evaluate(expected_docs=[], actual_docs=profile_result.retrieved_docs, query=profile_card.name)
-                profile_result.metrics["embedding"] = e_summary_profile.model_dump() if hasattr(e_summary_profile, "model_dump") else e_summary_profile
+            output = await strategy.run(*args, **kwargs)
+            execution_time = time.perf_counter() - start_time
 
-                e_summary_user = embedding_gauger.evaluate(expected_docs=[], actual_docs=user_result.retrieved_docs, query=profile_card.name)
-                user_result.metrics["embedding"] = e_summary_user.model_dump() if hasattr(e_summary_user, "model_dump") else e_summary_user
+            return StrategyOutput(
+                level=level,
+                strategy_name=strategy.name,
+                output=output,
+                execution_time=execution_time,
+                metadata={"success": True},
+            )
+
         except Exception as e:
-            logger.exception("Embedding gauger failed: %s", e)
-
-        profile_result.metrics["aggregated"] = self.aggregate_scores(profile_result.metrics, profile_card)
-        user_result.metrics["aggregated"] = self.aggregate_scores(user_result.metrics, profile_card)
-
-    # TODO-5: Refactor this piece of sh**t method to reduce the complexity.
-    def aggregate_scores(self, metrics_blob: Dict[str, Any], profile_card: ProfileCard) -> Dict[str, float]:
-        """
-        Aggregate per-scope metrics (retrieval/generation/embedding) using profile weights.
-        Returns a dict of aggregated values (per-scope and global).
-        """
-        weights = profile_card.config.get("weights", {})
-        strategy = profile_card.config.get("aggregation_strategy", "weighted")
-
-        # collect numeric scores (we expect each scope metrics to contain 'avg_score' or similar)
-        scope_scores: Dict[str, float] = {}
-        for scope in ("retrieval", "generation", "embedding"):
-            data = metrics_blob.get(scope)
-            if not data:
-                continue
-            # metric normalization heuristics
-            if isinstance(data, dict) and "report" in data:
-                score = data["report"].get("avg_score") if isinstance(data["report"], dict) else None
-            else:
-                score = None
-
-            # fallback tries
-            score = float(score) if score is not None else 0.0
-            scope_scores[scope] = score
-
-        # aggregation
-        if strategy == "weighted":
-            total = 0.0
-            for s, sc in scope_scores.items():
-                w = float(weights.get(s, 1.0))  # default weight 1.0
-                total += sc * w
-            # normalize by sum of weights to produce 0..1-like metric
-            weights_sum = sum(float(weights.get(s, 1.0)) for s in scope_scores.keys()) or 1.0
-            global_score = total / weights_sum
-        else:
-            # simple average
-            if scope_scores:
-                global_score = sum(scope_scores.values()) / len(scope_scores)
-            else:
-                global_score = 0.0
-
-        return {"global": float(global_score), "by_scope": scope_scores}
-
-    # I am tired boss..
+            execution_time = time.perf_counter() - start_time
+            logger.error(f"[PipelineExecutor] Strategy '{level}.{strategy.name}' failed:\n{e}")
+            return StrategyOutput(
+                level=level,
+                strategy_name=strategy.name,
+                output=None,
+                execution_time=execution_time,
+                metadata={"success": False, "error": str(e)},
+            )
