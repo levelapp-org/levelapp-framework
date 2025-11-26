@@ -1,14 +1,11 @@
 """levelapp/assessor/builder.py"""
 from __future__ import annotations
 
-import logging
-
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
-from dataclasses import dataclass, field
 
-from levelapp.assessor.registry import StrategyRegistry, BaseStrategy
-from levelapp.assessor.schemas import MetricSpec, StrategyConfig
+from levelapp.assessor.registry import StrategyRegistry, StrategyInfo
+from levelapp.assessor.schemas import MetricSpec, ProfileTemplate, ProfileCard, LevelConfig
 from levelapp.aspects.logger import logger
 
 
@@ -23,35 +20,6 @@ class ProfileTemplateBuilder(ABC):
         pass
 
 
-@dataclass(frozen=True)
-class ProfileTemplate:
-    name: str
-    description: str
-    strategies: Dict[str, str]  # {level_name: strategy_name}
-    aggregation_strategy: str = "weighted"
-    weights: Dict[str, float] = field(default_factory=lambda: {"retrieval": 1.0, "generation": 1.0})
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class LevelConfig:
-    """Represents a fully configured level with strategy and metrics."""
-    strategy_name: str
-    strategy_config: Dict[str, Any]
-    metrics: List[MetricSpec]
-
-
-@dataclass(frozen=True)
-class ProfileCard:
-    """Immutable representation of a fully configured profile."""
-    name: str
-    description: str
-    levels: Dict[str, LevelConfig]
-    aggregation_strategy: str
-    weights: Dict[str, float]
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
 class DefaultProfileTemplateProvider(ProfileTemplateBuilder):
     """Default in-code implementation of profile templates."""
     def __init__(self) -> None:
@@ -61,7 +29,7 @@ class DefaultProfileTemplateProvider(ProfileTemplateBuilder):
         if profile_name not in self._templates:
             raise KeyError(
                 f"[DefaultProfileTemplateProvider] Profile '{profile_name}' not found. "
-                f"Available profiles: {self._templates.keys()}'"
+                f"Available profiles: {list(self._templates.keys())}"  # Fixed: list() for proper display
             )
 
         return self._templates[profile_name]
@@ -72,30 +40,23 @@ class DefaultProfileTemplateProvider(ProfileTemplateBuilder):
     @staticmethod
     def _load_predefined_profiles() -> Dict[str, ProfileTemplate]:
         return {
-            "quality": ProfileTemplate(
-                name="quality",
-                description="Emphasizes accuracy and answer fidelity over latency or cost.",
-                strategies={
-                    "chunking": "semantic_splitter",
-                    "embedding": "openai_text_embedding",
-                    "retrieval": "bm25_retriever",
-                    "generation": "gpt4_generator"
-                },
-                weights={"retrieval": 1.0, "generation": 1.5},
-                metadata={"priority": "accuracy", "cost_tier": "high"},
-            ),
-            "efficiency": ProfileTemplate(
-                name="efficiency",
-                description="Optimized for performance and latency rather than completeness.",
+            "basic": ProfileTemplate(
+                name="basic",
+                description="Minimal compute profile for fast, deterministic testing",
                 strategies={
                     "chunking": "fixed_size_chunker",
-                    "embedding": "fast_embedder",
-                    "retrieval": "hybrid_retriever",
-                    "generation": "fast_llm_generator"
+                    "embedding": "minilm_embedder",
+                    "retrieval": "cosine_retriever",
+                    "generation": "basic_model_generator",
                 },
                 aggregation_strategy="weighted",
-                weights={"retrieval": 1.0, "generation": 0.8},
-                metadata={"priority": "speed", "cost_tier": "low"},
+                weights={"retrieval": 1.0, "generation": 1.0},
+                config_params={
+                    "chunking": {"chunk_size": 300, "overlap": 50},
+                    "retrieval": {"top_k": 5},
+                    "generation": {"model": "distilgpt2", "temperature": 0.1},
+                },
+                metadata={"priority": "accuracy", "cost_tier": "high"},
             ),
         }
 
@@ -117,7 +78,7 @@ class ProfileBuilder:
             self,
             profile_name: str,
             config: Dict[str, Any] | None = None
-    ) -> ProfileCard:  # Issue0 - Expected type 'ProfileCard', got 'ProfileCard | None' instead
+    ) -> ProfileCard:
         """
         Assemble the strategies and metrics into a complete ProfileCard.
 
@@ -138,8 +99,10 @@ class ProfileBuilder:
         template = self.template_builder.get_template(profile_name=profile_name)
 
         # Build level configuration
-        level_configs = self._build_level_configs(strategies=template.strategies, config=config)
-
+        level_configs = self._build_level_configs(
+            strategies=template.strategies,
+            config=config or {}
+        )
         # Validate before construction
         self._validate_profile_structure(level_configs, template)
 
@@ -167,7 +130,7 @@ class ProfileBuilder:
 
         Args:
             strategies (Dict[str, str]): Dictionary of strategy name and strategy configuration.
-            config (Dict[str, Any]): Optional configuration overrides for strategies.
+            config (Dict[str, Any]): Configuration overrides for strategies.
 
         Returns:
             level config: Configuration for each level.
@@ -178,14 +141,14 @@ class ProfileBuilder:
         level_configs = {}
 
         for level_name, strategy_name in strategies.items():
-            # Get strategy from registry
-            strategy_cls = self.registry.get_strategy(level=level_name, name=strategy_name)
-            if not strategy_cls:
+            strategy_info = self.registry.get_strategy_info(level=level_name, name=strategy_name)
+            if not strategy_info:
                 raise ValueError(f"[ProfileBuilder] Strategy '{strategy_name}' not found for level '{level_name}'.")
 
             strategy_config = self._get_strategy_config(
-                strategy_cls=strategy_cls,
-                config=config.get(level_name, {}))
+                strategy_info=strategy_info,
+                level_config=config.get(level_name, {})
+            )
 
             # Attach metrics
             metrics = self._resolve_metrics(level=level_name, strategy_name=strategy_name)
@@ -197,27 +160,39 @@ class ProfileBuilder:
                 metrics=metrics,
             )
 
-            logger.debug(f"[ProfileBuilder] Configured level '{level_name}' with strategy '{strategy_name}'.'")
+            logger.debug(f"[ProfileBuilder] Configured level '{level_name}' with strategy '{strategy_name}'.")
 
         return level_configs
 
     @staticmethod
     def _get_strategy_config(
-            strategy_cls: Any,
-            config: Dict[str, Any]
+            strategy_info: StrategyInfo,
+            level_config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Extract and merge strategy configuration.
 
         Args:
-            strategy_cls (Any): Strategy class.
-            config (Dict[str, Any]): Optional configuration overrides for strategies.
+            strategy_info (Any): Strategy info object containing config schema.
+            level_config (Dict[str, Any]): Level-specific configuration.
 
         Returns:
-            Strategy configuration: Strategy configuration.
+            Strategy configuration: Merged strategy configuration.
         """
-        base_config = getattr(strategy_cls, "config", {})
-        return {**base_config, **config}
+        base_config = {}
+
+        # If config schema exists, use its defaults
+        if strategy_info.config_schema:
+            try:
+                # Create instance with empty config to get defaults
+                schema_instance = strategy_info.config_schema()
+                base_config = schema_instance.model_dump()
+
+            except ValueError:
+                base_config = {}
+
+        # Merge with level-specific config
+        return {**base_config, **level_config}
 
     def _resolve_metrics(
             self,
@@ -228,7 +203,7 @@ class ProfileBuilder:
         Resolve metrics for a given strategy.
 
         Args:
-            level (str): Strategy name.
+            level (str): Strategy level.
             strategy_name (str): Strategy name.
 
         Returns:
@@ -261,7 +236,7 @@ class ProfileBuilder:
 
         # Validate weights
         if not template.weights or not all(isinstance(w, (int, float)) for w in template.weights.values()):
-            raise ValueError(f"[ProfileBuilder] Profile weights must be a float or int.")
+            raise ValueError("[ProfileBuilder] Profile weights must be a float or int.")
 
         # Validate aggregation strategy
         valid_aggregations = {"weighted", "average", "max"}
@@ -274,12 +249,16 @@ class ProfileBuilder:
 
 if __name__ == '__main__':
     # Example usage
-    registry = StrategyRegistry()
-    builder = ProfileBuilder(registry)
+    from levelapp.assessor.strategies import register_basic_profile_strategies
+
+    registry_ = StrategyRegistry()
+    register_basic_profile_strategies(registry=registry_)
+    builder_ = ProfileBuilder(registry_)
 
     # List available profiles
-    print("Available profiles:", builder.list_available_profiles())
+    print("Available profiles:", builder_.list_available_profiles())
 
     # Build a profile
-    profile_card = builder.build(profile_name="quality")
-    print(f"Built profile: {profile_card.name}")
+    profile_card_ = builder_.build(profile_name="basic")
+    print(f"Built profile: {profile_card_}\n---")
+    print(f"Profile levels: {list(profile_card_.levels.keys())}\n---")

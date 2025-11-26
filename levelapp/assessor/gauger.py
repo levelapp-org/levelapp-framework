@@ -944,7 +944,8 @@ async def demonstrate_gaugers():
     user_result = PipelineResult(
         query="What is machine learning?",
         strategy_outputs={},
-        final_answer="Machine learning is a field of AI where computers learn from data to make predictions or decisions without explicit programming for every task.",
+        final_answer="Gabagool! Ova heaa!",
+        # final_answer="Machine learning is a field of AI where computers learn from data to make predictions or decisions without explicit programming for every task.",
         source_documents=[
             Document(content="Machine learning uses statistical techniques."),
             Document(content="Deep learning is a type of machine learning.")

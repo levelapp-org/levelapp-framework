@@ -105,25 +105,6 @@ class EmbeddingStrategy(BaseStrategy):
         pass
 
 
-class RetrievalStrategy(BaseStrategy):
-    """Retrieval strategy contract."""
-    level = "retrieval"
-
-    @abstractmethod
-    async def run(self, query: str, top_k: int = 5) -> List[Document]:
-        """
-        Retrieve most relevant documents for a query.
-
-        Args:
-            query (str): Input query string.
-            top_k (int): Number of top results to retrieve.
-
-        Returns:
-            List of retrieved documents sorted by relevance.
-        """
-        pass
-
-
 class GenerationStrategy(BaseStrategy):
     """Generation strategy contract."""
     level = "generation"
@@ -139,6 +120,25 @@ class GenerationStrategy(BaseStrategy):
 
         Returns:
             Generated answer string.
+        """
+        pass
+
+
+class RetrievalStrategy(BaseStrategy):
+    """Retrieval strategy contract."""
+    level = "retrieval"
+
+    @abstractmethod
+    async def run(self, query: str, top_k: int = 5) -> List[Document]:
+        """
+        Retrieve most relevant documents for a query.
+
+        Args:
+            query (str): Input query string.
+            top_k (int): Number of top results to retrieve.
+
+        Returns:
+            List of retrieved documents sorted by relevance.
         """
         pass
 
