@@ -6,6 +6,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Dict
 
+from levelapp.assessor.orchestrator import AssessmentOrchestrator
 from levelapp.core.base import BaseProcess
 from levelapp.endpoint.client import EndpointConfig
 from levelapp.endpoint.manager import EndpointConfigManager
@@ -187,5 +188,35 @@ class ComparatorWorkflow(BaseWorkflow):
     def _setup_process(self, context: WorkflowContext) -> BaseProcess:
         raise NotImplementedError
 
+    async def test_connection(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        pass
+
     def _load_input_data(self, context: WorkflowContext) -> Any:
         raise NotImplementedError
+
+
+class AssessorWorkflow(BaseWorkflow):
+    def __init__(self, context: WorkflowContext) -> None:
+        super().__init__(name="RAGAssessor", context=context)
+
+    def _setup_process(self, context: WorkflowContext) -> BaseProcess:
+        """
+        Concrete implementation for setting up the assessor workflow.
+
+        Args:
+            context (WorkflowContext): The workflow context for the assessor workflow.
+
+        Returns:
+            ProfileOrchestrator instance.
+        """
+        assessor = AssessmentOrchestrator()
+        assessor.setup(
+            endpoint_config=context.endpoint,
+            profiles=context.config.assessor.profile_targets,
+        )
+
+    async def test_connection(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        pass
+
+    def _load_input_data(self, context: WorkflowContext) -> Any:
+        pass
