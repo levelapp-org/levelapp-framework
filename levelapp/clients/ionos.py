@@ -43,7 +43,7 @@ class IonosClient(BaseChatClient):
         Example:
             "models/{model_id}/predictions"
         """
-        return f"models/{self.model_id}/predictions"
+        return f"v1/chat/completions"
 
     def _build_endpoint(self) -> str:
         """
@@ -77,14 +77,13 @@ class IonosClient(BaseChatClient):
             Dict[str, Any]: Payload containing properties and sampling options.
         """
         return {
-            "properties": {"input": message},
-            "option": {
-                "top-k": self.top_k,
-                "top-p": self.top_p,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "seed": uuid.uuid4().int & ((1 << 16) - 1),
-            },
+            "model": self.model_id,
+            "messages": [
+                {"role": "user", "content": message}
+            ],
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "max_completion_tokens": self.max_tokens
         }
 
     def parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
@@ -108,9 +107,20 @@ class IonosClient(BaseChatClient):
                 }
             }
         """
-        input_tokens = response.get("metadata", {}).get("inputTokens", -1)
-        output_tokens = response.get("metadata", {}).get("outputTokens", -1)
-        output = response.get("properties", {}).get("output", "")
-        cleaned = self.sanitizer.strip_code_fences(output)
+        message = response["choices"][0]["message"]["content"]
+
+        cleaned = self.sanitizer.strip_code_fences(message)
         parsed = self.sanitizer.safe_load_json(text=cleaned)
-        return {"output": parsed, "metadata": {"input_tokens": input_tokens, "output_tokens": output_tokens}}
+
+        if parsed is None:
+            parsed = cleaned
+
+        usage = response.get("usage", {})
+
+        return {
+            "output": parsed,
+            "metadata": {
+                "input_tokens": usage.get("prompt_tokens", -1),
+                "output_tokens": usage.get("completion_tokens", -1)
+            }
+        }
