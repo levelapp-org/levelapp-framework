@@ -1,7 +1,7 @@
 """levelapp/endpoint/parsers.py"""
 from typing import List, Dict, Any
 
-from levelapp.config.endpoint_ import ResponseMappingConfig
+from src.data.endpoint_ import ResponseMappingConfig
 from levelapp.endpoint.schemas import RequestSchemaConfig
 
 
