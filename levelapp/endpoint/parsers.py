@@ -1,8 +1,7 @@
 """levelapp/endpoint/parsers.py"""
 from typing import List, Dict, Any
 
-from src.data.endpoint_ import ResponseMappingConfig
-from levelapp.endpoint.schemas import RequestSchemaConfig
+from levelapp.endpoint.schemas import RequestSchemaConfig, ResponseMappingConfig
 
 
 class RequestPayloadBuilder:
