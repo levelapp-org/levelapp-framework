@@ -3,6 +3,7 @@
 """
 import time
 import asyncio
+import uuid
 
 from datetime import datetime
 from collections import defaultdict
@@ -293,6 +294,9 @@ class ConversationSimulator(BaseProcess):
                 request_payload = interaction.request_payload
                 request_payload.update({"user_message": user_message})
                 logger.info(f"{_LOG} Request payload (Configured Request Schema):\n{request_payload}\n---")
+
+            if script.uuid_field in request_payload.keys():
+                request_payload[script.uuid_field] = str(uuid.uuid4())
 
             mappings = self.endpoint_config.response_mapping
 
