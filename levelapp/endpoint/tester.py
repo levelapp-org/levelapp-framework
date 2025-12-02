@@ -2,9 +2,8 @@
 import logging
 from typing import Dict, Any
 
-from levelapp.config.endpoint_ import ResponseExtractor
 from levelapp.endpoint.client import EndpointConfig, APIClient
-from levelapp.endpoint.parsers import RequestPayloadBuilder
+from levelapp.endpoint.parsers import RequestPayloadBuilder, ResponseDataExtractor
 
 
 class ConnectivityTester:
@@ -13,7 +12,7 @@ class ConnectivityTester:
         self.config = config
         self.client = APIClient(config=config)
         self.payload_builder = RequestPayloadBuilder()
-        self.response_extractor = ResponseExtractor()
+        self.response_extractor = ResponseDataExtractor()
         self.logger = logging.getLogger(f"ConnectivityTester.{self.config.name}")
 
     async def test(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
