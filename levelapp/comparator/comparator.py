@@ -152,7 +152,7 @@ class MetadataComparator(BaseProcess):
         """
         # Case 1: Both nodes are dicts -> recurse on keys
         if isinstance(ref_node, Mapping) and isinstance(ext_node, Mapping):
-            all_keys = set(ref_node.keys()) | set(ext_node.keys())
+            all_keys = set(ref_node.keys())
             for key in all_keys:
                 new_prefix = f"{prefix}.{key}" if prefix else key
                 ref_subnode = ref_node.get(key, [])
