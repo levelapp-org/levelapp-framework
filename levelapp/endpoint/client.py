@@ -85,7 +85,8 @@ class APIClient:
                     params=query_params,
                     headers=headers,
                 )
-                response.raise_for_status()
+                # Disabled to prevent simulation interruption
+                # response.raise_for_status()
                 return response
 
             except httpx.HTTPStatusError as e:
