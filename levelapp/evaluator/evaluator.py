@@ -240,7 +240,7 @@ class MetadataEvaluator(BaseEvaluator):
         """
         if config:
             self.config = config
-            self.metics_map = config.evaluation.metrics_map
+            self.metrics_map = config.evaluation.metrics_map
 
         self.data_loader = DataLoader()
         self.comparator = MetadataComparator()
@@ -268,6 +268,9 @@ class MetadataEvaluator(BaseEvaluator):
 
         if metrics_mapping:
             self.comparator.metrics_manager = metrics_mapping
+        else:
+            logger.info(f"[MetadataEvaluator] Metric map: {self.metrics_map}")
+            self.comparator.metrics_manager = self.metrics_map
 
         self.comparator.metrics_manager = self.metrics_manager
         self.comparator.generated_data = gen_data
@@ -275,6 +278,7 @@ class MetadataEvaluator(BaseEvaluator):
 
         output = self.comparator.run(indexed_mode=False)
         results: Dict[str, float] = {}
+        logger.info(f"[MetadataEvaluator] Metadata Evaluation Output:\n{output}]")
 
         for k, v in output.items():
             field = v.get("field_name", "N/A")

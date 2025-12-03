@@ -55,7 +55,7 @@ class MetricConfig(BaseModel):
     """
     Configuration for a field's comparison metric.
     """
-    field_name: str = Field(default="lev_norm", description="Name of the field")
+    field_name: str = Field(default="token-set-ratio", description="Name of the field")
     entity_metric: EntityMetric = Field(default=EntityMetric.LEV_NORM, description="Entity level metric")
     set_metric: SetMetric = Field(default=SetMetric.ACCURACY, description="Set level metric")
-    threshold: float = Field(default=100, ge=0, le=100, description="Match threshold")
+    threshold: float = Field(default=50, ge=0, le=100, description="Match threshold")

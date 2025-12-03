@@ -111,9 +111,9 @@ class MetricsManager:
         """
         default_config = MetricConfig(
             field_name=field,
-            entity_metric=EntityMetric.LEV_NORM,
+            entity_metric=EntityMetric.TOKEN_SET_RATIO,
             set_metric=SetMetric.ACCURACY,
-            threshold=1
+            threshold=0.5
         )
         return self._metrics_mapping.get(field, default_config)
 
