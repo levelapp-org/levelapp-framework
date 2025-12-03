@@ -201,6 +201,9 @@ class ConversationSimulator(BaseProcess):
         all_attempts_verdicts: Dict[str, List[str]] = defaultdict(list)
 
         async def simulate_attempt(attempt_number: int) -> Dict[str, Any]:
+            from uuid import uuid4
+            attempt_id: str | None = str(uuid4())
+
             logger.info(f"{_LOG} Running attempt: {attempt_number + 1}/{attempts}\n---")
             start_time = time.time()
 
@@ -209,6 +212,7 @@ class ConversationSimulator(BaseProcess):
 
             interaction_results = await self.simulate_interactions(
                 script=script,
+                attempt_id=attempt_id,
                 evaluation_verdicts=collected_verdicts,
                 collected_scores=collected_scores,
             )
@@ -230,6 +234,7 @@ class ConversationSimulator(BaseProcess):
 
             return {
                 "attempt": attempt_number + 1,
+                "attempt_id": attempt_id,
                 "script_id": script.id,
                 "total_duration": elapsed_time,
                 "interaction_results": interaction_results,
@@ -254,6 +259,7 @@ class ConversationSimulator(BaseProcess):
     async def simulate_interactions(
         self,
         script: ConversationScript,
+        attempt_id: str,
         evaluation_verdicts: Dict[str, List[str]],
         collected_scores: Dict[str, List[Any]],
     ) -> List[Dict[str, Any]]:
@@ -262,6 +268,7 @@ class ConversationSimulator(BaseProcess):
 
         Args:
             script (ConversationScript): The script to simulate.
+            attempt_id (str): The id of the attempt.
             evaluation_verdicts(Dict[str, List[str]]): evaluation verdict for each evaluator.
             collected_scores(Dict[str, List[Any]]): collected scores for each target.
 
@@ -279,24 +286,23 @@ class ConversationSimulator(BaseProcess):
         interactions = script.interactions
 
         for interaction in interactions:
+            request_payload = interaction.request_payload.copy()
             if contextual_mode:
                 from levelapp.simulator.utils import set_by_path
-                request_payload = interaction.request_payload
+                request_payload[script.uuid_field] = attempt_id
                 user_message = interaction.user_message
                 set_by_path(
                     obj=request_payload,
                     path=interaction.user_message_path,
                     value=user_message,
                 )
-                logger.info(f"{_LOG} Request payload (Variable Request Schema):\n{request_payload}\n---")
+                logger.info(f"{_LOG} Request payload (Preloaded Request Schema):\n{request_payload}\n---")
             else:
                 user_message = interaction.user_message
-                request_payload = interaction.request_payload
                 request_payload.update({"user_message": user_message})
                 logger.info(f"{_LOG} Request payload (Configured Request Schema):\n{request_payload}\n---")
 
-            if script.uuid_field in request_payload.keys():
-                request_payload[script.uuid_field] = str(uuid.uuid4())
+            logger.info(f"{_LOG} Conversation ID: {attempt_id}")
 
             mappings = self.endpoint_config.response_mapping
 
@@ -306,7 +312,7 @@ class ConversationSimulator(BaseProcess):
                 contextual_mode=contextual_mode
             )
 
-            logger.info(f"{_LOG} Response:\n{response}\n---")
+            logger.info(f"{_LOG} Response:\n[{response}]\n---")
 
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata
@@ -315,6 +321,7 @@ class ConversationSimulator(BaseProcess):
             if not response or response.status_code != 200:
                 logger.error(f"{_LOG} Interaction request failed.")
                 result = {
+                    "conversation_id": attempt_id,
                     "user_message": user_message,
                     "generated_reply": "Interaction Request failed",
                     "reference_reply": reference_reply,
@@ -331,13 +338,13 @@ class ConversationSimulator(BaseProcess):
                 mappings=mappings,
             )
 
-            logger.info(f"{_LOG} Interaction details:\n{interaction_details}\n---")
+            logger.info(f"{_LOG} Interaction details <ConvID:{attempt_id}>:\n{interaction_details}\n---")
 
             generated_reply = interaction_details.get("agent_reply", "")
             generated_metadata = interaction_details.get("metadata", {})
             extracted_guardrail_flag = interaction_details.get("guardrail_flag", False)
 
-            logger.info(f"{_LOG} Generated reply:\n{generated_reply}\n---")
+            logger.info(f"{_LOG} Generated reply <ConvID:{attempt_id}>:\n{generated_reply}\n---")
 
             evaluation_results = await self.evaluate_interaction(
                 user_input=user_message,
@@ -359,6 +366,7 @@ class ConversationSimulator(BaseProcess):
             logger.info(f"{_LOG} Interaction simulation complete in {elapsed_time:.2f} seconds.\n---")
 
             result = {
+                "conversation_id": attempt_id,
                 "user_message": user_message,
                 "generated_reply": generated_reply,
                 "reference_reply": reference_reply,
