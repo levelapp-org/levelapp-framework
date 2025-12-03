@@ -20,6 +20,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "backoff>=2.2.1",
     "google-api-core>=2.25.1",
     "google-auth>=2.40.3",
     "google-cloud-firestore>=2.21.0",
