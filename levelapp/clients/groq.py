@@ -99,32 +99,3 @@ class GroqClient(BaseChatClient):
         output = response.get("choices", [{}])[0].get("message", {}).get("content", "")
         parsed = self.sanitizer.safe_load_json(text=output)
         return {"output": parsed, "metadata": {"input_tokens": input_tokens, "output_tokens": output_tokens}}
-
-
-if __name__ == '__main__':
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    groq_client = GroqClient()
-    message = """
-    Extract the information as JSON data from the following content:
-    CONTENT:
-    The Strawhat crew is a pirate crew under the command of Monkey D. Luffy. The crew has the following members:
-    - Roronoa Zoro: Right Hand
-    - Vinesmoke Sanji: Cook
-    - Nami: Navigator
-    - Ussop: Marksman
-    - Tony Tony Chopper: Doctor
-    The crew sails on the chip: Thousand Sunny Go.
-
-    Return only the JSON data in a JSON format extracting the following information:
-    - Crew Name
-    - Captain
-    - Members:
-        - Name
-        - Role
-    Ship:
-    """
-    reply = groq_client.call(message=message)
-    parsed_reply = groq_client.parse_response(reply)
-    print(f"Parsed reply {type(parsed_reply)}:\n{parsed_reply}")
