@@ -5,6 +5,8 @@ import threading
 from typing import Dict, Type
 
 from levelapp.clients.anthropic import AnthropicClient
+from levelapp.clients.gemini import GeminiClient
+from levelapp.clients.groq import GroqClient
 from levelapp.clients.ionos import IonosClient
 from levelapp.clients.mistral import MistralClient
 from levelapp.clients.openai import OpenAIClient
@@ -107,7 +109,9 @@ clients = {
     "openai": OpenAIClient,
     "ionos": IonosClient,
     "mistral": MistralClient,
-    "anthropic": AnthropicClient
+    "anthropic": AnthropicClient,
+    "groq": GroqClient,
+    "gemini": GeminiClient
 }
 
 for provider_, client_class_ in clients.items():

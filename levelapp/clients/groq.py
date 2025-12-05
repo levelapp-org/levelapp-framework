@@ -1,32 +1,31 @@
-"""levelapp/clients/openai.py"""
+"""levelapp/clients/groq.py"""
 import os
-
 from typing import Dict, Any
 from levelapp.core.base import BaseChatClient
 
 
-class OpenAIClient(BaseChatClient):
+class GroqClient(BaseChatClient):
     """
-    Client for interacting with OpenAI's Chat Completions API.
+    Client for interacting with Groq's Chat Completions API.
 
-    This implementation adapts requests and responses to the OpenAI API
-    format, including chat message structure, headers, and token usage reporting.
+    This implementation adapts requests and responses to the Groq API
+    format, which is OpenAI-compatible but with Groq-specific models and endpoints.
 
     Attributes:
-        model (str): Target model ID (default: "gpt-4o-mini").
-        base_url (str): Base endpoint for OpenAI API (default: https://api.openai.com/v1).
-        api_key (str): Authentication token for the OpenAI API.
+        model (str): Target model ID (default: "llama-3.3-70b-versatile").
+        base_url (str): Base endpoint for Groq API (default: https://api.groq.com/openai/v1).
+        api_key (str): Authentication token for the Groq API.
         max_tokens (int): Maximum tokens allowed in the completion.
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.model = kwargs.get('model') or os.environ.get("OPENAI_MODEL")
-        self.base_url = kwargs.get('base_url') or "https://api.openai.com/v1"
-        self.api_key = kwargs.get('api_key') or os.environ.get('OPENAI_API_KEY')
+        self.model = kwargs.get('model') or os.environ.get('GROK_MODEL')
+        self.base_url = kwargs.get('base_url') or "https://api.groq.com/openai/v1"
+        self.api_key = kwargs.get('api_key') or os.environ.get('GROQ_API_KEY')
         self.max_tokens = kwargs.get('max_tokens') or 1024
 
         if not self.api_key:
-            raise ValueError("OpenAI API key not set")
+            raise ValueError("Groq API key not set")
 
     @property
     def endpoint_path(self) -> str:
@@ -49,7 +48,7 @@ class OpenAIClient(BaseChatClient):
 
     def _build_headers(self) -> Dict[str, str]:
         """
-        Build HTTP headers for the OpenAI API request.
+        Build HTTP headers for the Groq API request.
 
         Returns:
             Dict[str, str]: Headers with authentication and content type.
@@ -61,7 +60,7 @@ class OpenAIClient(BaseChatClient):
 
     def _build_payload(self, message: str) -> Dict[str, Any]:
         """
-        Construct the JSON payload for the OpenAI Chat Completions API.
+        Construct the JSON payload for the Groq Chat Completions API.
 
         Args:
             message (str): User input or prompt to evaluate.
@@ -77,14 +76,14 @@ class OpenAIClient(BaseChatClient):
 
     def parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Parse and normalize the OpenAI API response.
+        Parse and normalize the Groq API response.
 
         - Extracts text output from `choices[0].message.content`.
         - Attempts to JSON-parse the result if it contains structured content.
         - Collects token usage metadata from `usage`.
 
         Args:
-            response (Dict[str, Any]): Raw JSON response from OpenAI.
+            response (Dict[str, Any]): Raw JSON response from Groq.
 
         Returns:
             Dict[str, Any]: {
