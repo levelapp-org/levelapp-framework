@@ -289,7 +289,10 @@ class ConversationSimulator(BaseProcess):
             request_payload = interaction.request_payload.copy()
             if contextual_mode:
                 from levelapp.simulator.utils import set_by_path
-                request_payload[script.uuid_field] = attempt_id
+
+                if script.uuid_field:
+                    request_payload[script.uuid_field] = attempt_id
+
                 user_message = interaction.user_message
                 set_by_path(
                     obj=request_payload,
@@ -297,6 +300,7 @@ class ConversationSimulator(BaseProcess):
                     value=user_message,
                 )
                 logger.info(f"{_LOG} Request payload (Preloaded Request Schema):\n{request_payload}\n---")
+
             else:
                 user_message = interaction.user_message
                 request_payload.update({"user_message": user_message})
