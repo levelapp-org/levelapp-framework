@@ -20,7 +20,7 @@ class GeminiClient(BaseChatClient):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.model = kwargs.get('model') or os.environ.get("GEMINI_MODEL_ID")
+        self.model = kwargs.get('model') or os.environ.get("GEMINI_MODEL")
         self.base_url = kwargs.get('base_url') or "https://generativelanguage.googleapis.com/v1beta"
         self.api_key = kwargs.get('api_key') or os.environ.get('GEMINI_API_KEY')
         self.max_tokens = kwargs.get('max_tokens') or 1024
