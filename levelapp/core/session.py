@@ -1,4 +1,5 @@
 """levelapp/core/session.py"""
+
 import asyncio
 import threading
 
@@ -36,17 +37,19 @@ class TemporalStatusMixin(ABC):
 @dataclass
 class SessionMetadata(TemporalStatusMixin):
     """Metadata for an evaluation session."""
+
     session_name: str
     started_at: datetime | None = None
     ended_at: datetime | None = None
     total_executions: int = 0
     total_duration: float = 0.0
-    steps: Dict[str, 'StepMetadata'] = field(default_factory=dict)
+    steps: Dict[str, "StepMetadata"] = field(default_factory=dict)
 
 
 @dataclass
 class StepMetadata(TemporalStatusMixin):
     """Metadata for a specific step within an evaluation session."""
+
     step_name: str
     session_name: str
     started_at: datetime | None = None
@@ -58,11 +61,12 @@ class StepMetadata(TemporalStatusMixin):
 
 class StepContext:
     """Context manager for an evaluation step within an EvaluationSession."""
+
     def __init__(
-            self,
-            session: "EvaluationSession",
-            step_name: str,
-            category: MetricType,
+        self,
+        session: "EvaluationSession",
+        step_name: str,
+        category: MetricType,
     ):
         """
         Initialize StepContext.
@@ -86,7 +90,7 @@ class StepContext:
             self.step_meta = StepMetadata(
                 step_name=self.step_name,
                 session_name=self.session.session_name,
-                started_at=datetime.now()
+                started_at=datetime.now(),
             )
             self.session.session_metadata.steps[self.step_name] = self.step_meta
 
@@ -105,7 +109,9 @@ class StepContext:
                 self._func_gen = self._monitored_func()
                 next(self._func_gen)  # Enter monitoring
             except Exception as e:
-                logger.error(f"[StepContext] Failed to initialize monitoring for {self.full_step_name}:\n{e}")
+                logger.error(
+                    f"[StepContext] Failed to initialize monitoring for {self.full_step_name}:\n{e}"
+                )
                 raise
 
         return self  # returning self allows nested instrumentation
@@ -131,8 +137,7 @@ class StepContext:
 
             if self.session.enable_monitoring and self.step_meta.duration:
                 self.session.monitor.update_procedure_duration(
-                    name=self.full_step_name,
-                    value=self.step_meta.duration
+                    name=self.full_step_name, value=self.step_meta.duration
                 )
                 self.session.session_metadata.total_duration += self.step_meta.duration
 
@@ -141,12 +146,13 @@ class StepContext:
 
 class EvaluationSession:
     """Context manager for LLM evaluation sessions with integrated monitoring."""
+
     def __init__(
-            self,
-            session_name: str = "test-session",
-            workflow_config: WorkflowConfig | None = None,
-            enable_monitoring: bool = True,
-            verbose: bool = False
+        self,
+        session_name: str = "test-session",
+        workflow_config: WorkflowConfig | None = None,
+        enable_monitoring: bool = True,
+        verbose: bool = False,
     ):
         """
         Initialize Evaluation Session.
@@ -182,7 +188,9 @@ class EvaluationSession:
         # Instantiate workflow if not already
         if not self.workflow:
             if not self.workflow_config:
-                raise ValueError(f"{self._NAME}: Workflow configuration must be provided")
+                raise ValueError(
+                    f"{self._NAME}: Workflow configuration must be provided"
+                )
 
             context_builder = WorkflowContextBuilder(self.workflow_config)
             context = context_builder.build()
@@ -203,11 +211,15 @@ class EvaluationSession:
         )
 
         if exc_type:
-            logger.error(f"[{self._NAME}] Session ended with error: {exc_val}", exc_info=True)
+            logger.error(
+                f"[{self._NAME}] Session ended with error: {exc_val}", exc_info=True
+            )
 
         return False
 
-    def step(self, step_name: str, category: MetricType = MetricType.CUSTOM) -> StepContext:
+    def step(
+        self, step_name: str, category: MetricType = MetricType.CUSTOM
+    ) -> StepContext:
         """Create a monitored evaluation step."""
         return StepContext(self, step_name, category)
 
@@ -224,7 +236,10 @@ class EvaluationSession:
         with self.step(step_name="execute", category=MetricType.EXECUTION):
             self.workflow.execute()
 
-        with self.step(step_name=f"{self.session_name}.collect_results", category=MetricType.RESULTS_COLLECTION):
+        with self.step(
+            step_name=f"{self.session_name}.collect_results",
+            category=MetricType.RESULTS_COLLECTION,
+        ):
             self.workflow.collect_results()
 
     def run_connectivity_test(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -239,22 +254,87 @@ class EvaluationSession:
             return {
                 "session": {
                     "name": self.session_name,
-                    "duration": precisedelta(self.session_metadata.duration, suppress=['minutes']),
+                    "duration": precisedelta(
+                        self.session_metadata.duration, suppress=["minutes"]
+                    ),
                     "start_time": self.session_metadata.started_at.isoformat(),
                     "end_time": self.session_metadata.ended_at.isoformat(),
                     "steps": len(self.session_metadata.steps),
-                    "errors": sum(s.error_count for s in self.session_metadata.steps.values())
+                    "errors": sum(
+                        s.error_count for s in self.session_metadata.steps.values()
+                    ),
                 },
-                "stats": self.monitor.get_all_stats()
+                "stats": self.monitor.get_all_stats(),
             }
 
         return {
             "session": {
                 "name": self.session_name,
-                "duration": precisedelta(self.session_metadata.duration, suppress=['minutes']),
+                "duration": precisedelta(
+                    self.session_metadata.duration, suppress=["minutes"]
+                ),
                 "start_time": self.session_metadata.started_at.isoformat(),
                 "end_time": self.session_metadata.ended_at.isoformat(),
                 "steps": len(self.session_metadata.steps),
-                "errors": sum(s.error_count for s in self.session_metadata.steps.values())
+                "errors": sum(
+                    s.error_count for s in self.session_metadata.steps.values()
+                ),
             },
         }
+
+    def visualize_results(
+        self, output_dir: str = "./visualizations", formats: List[str] = None
+    ) -> Dict[str, str]:
+        """
+        Generate visualizations for evaluation results.
+
+        Args:
+            output_dir: Directory to save visualizations (default: ./visualizations)
+            formats: List of export formats (html, png, pdf). Default: ["html"]
+
+        Returns:
+            Dictionary mapping format to file path
+
+        Example:
+            >>> with EvaluationSession("my-eval", config) as session:
+            ...     session.run()
+            ...     files = session.visualize_results(
+            ...         output_dir="./reports",
+            ...         formats=["html", "png"]
+            ...     )
+            ...     print(f"Dashboard: {files['html']}")
+        """
+        if formats is None:
+            formats = ["html"]
+
+        logger.info(f"[{self.session_name}] Generating visualizations to: {output_dir}")
+
+        # Import here to avoid circular dependency
+        from levelapp.visualization import ResultsExporter
+
+        # Collect results from workflow
+        results = self.workflow.collect_results()
+
+        if not results:
+            logger.warning(
+                f"[{self.session_name}] No results available for visualization"
+            )
+            return {}
+
+        # Parse results if they're JSON string
+        if isinstance(results, str):
+            import json
+            from levelapp.simulator.schemas import SimulationResults
+
+            results_dict = json.loads(results)
+            results = SimulationResults.model_validate(results_dict)
+
+        # Export visualizations
+        exporter = ResultsExporter(output_dir=output_dir)
+        exported_files = exporter.export_dashboard(results=results, formats=formats)
+
+        logger.info(
+            f"[{self.session_name}] Visualizations generated: {list(exported_files.keys())}"
+        )
+
+        return exported_files
