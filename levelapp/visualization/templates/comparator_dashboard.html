@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Metadata Heatmap -->
+<div class="chart-section">
+    <h2>Metadata Field Accuracy</h2>
+    {{ chart_html|safe }}
+</div>
+
+<!-- Results Table -->
+<div class="chart-section">
+    <h2>Detailed Comparison Results</h2>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #667eea; color: white;">
+                    <th style="padding: 12px; text-align: left;">Field Name</th>
+                    <th style="padding: 12px; text-align: left;">Entity Metric</th>
+                    <th style="padding: 12px; text-align: left;">Set Metric</th>
+                    <th style="padding: 12px; text-align: center;">Score</th>
+                    <th style="padding: 12px; text-align: center;">Threshold</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for idx, result in results.items() %}
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 12px;">{{ result.field_name }}</td>
+                    <td style="padding: 12px;">{{ result.entity_metric }}</td>
+                    <td style="padding: 12px;">{{ result.set_metric }}</td>
+                    <td style="padding: 12px; text-align: center;">
+                        {% set score = result.set_scores[0] if result.set_scores is iterable and
+                        result.set_scores|length > 0 else result.set_scores %}
+                        <span
+                            class="badge {% if score >= result.threshold %}badge-success{% else %}badge-info{% endif %}">
+                            {{ "%.3f"|format(score if score is number else 0) }}
+                        </span>
+                    </td>
+                    <td style="padding: 12px; text-align: center;">{{ result.threshold }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Raw Data -->
+<div class="chart-section">
+    <h2>Raw Comparison Data</h2>
+    <details>
+        <summary style="cursor: pointer; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            Click to view raw JSON data
+        </summary>
+        <pre
+            style="background: #f8f9fa; padding: 20px; border-radius: 5px; overflow-x: auto; margin-top: 10px;">{{ results|tojson(indent=2) }}</pre>
+    </details>
+</div>
+{% endblock %}
