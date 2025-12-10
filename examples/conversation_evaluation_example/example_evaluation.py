@@ -15,13 +15,27 @@ if __name__ == "__main__":
     # config.set_reference_data(content={"scripts": [...]})  # Inline script
 
     # 2. Create an evaluation session
-    with EvaluationSession(session_name="chatbot-sim-1", workflow_config=config) as session:
+    with EvaluationSession(
+        session_name="chatbot-sim-1", workflow_config=config
+    ) as session:
         # 2.1. Run session (simulation session)
         session.run()
 
         # 2.2. Collect evaluation results
         results = session.workflow.collect_results()
         print("Evaluation Results:", results)
+
+        # 2.3 Generate visualizations
+
+        print("\nGenerating visualizations...")
+        files = session.visualize_results(
+            output_dir="./visualization_output", formats=["html", "png"]
+        )
+
+        # Print generated files
+        print("\nGenerated files:")
+        for format_type, file_path in files.items():
+            print(f"  {format_type.upper()}: {file_path}")
 
     # 3. Get aggregated stats (monitoring stats)
     stats = session.get_stats()
