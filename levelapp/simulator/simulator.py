@@ -3,7 +3,6 @@
 """
 import time
 import asyncio
-import uuid
 
 from datetime import datetime
 from collections import defaultdict
@@ -351,6 +350,7 @@ class ConversationSimulator(BaseProcess):
             logger.info(f"{_LOG} Generated reply <ConvID:{attempt_id}>:\n{generated_reply}\n---")
 
             evaluation_results = await self.evaluate_interaction(
+                domain_context=script.domain_context,
                 user_input=user_message,
                 generated_reply=generated_reply,
                 reference_reply=reference_reply,
@@ -386,6 +386,7 @@ class ConversationSimulator(BaseProcess):
 
     async def evaluate_interaction(
         self,
+        domain_context: str,
         user_input: str,
         generated_reply: str,
         reference_reply: str,
@@ -398,6 +399,7 @@ class ConversationSimulator(BaseProcess):
         Evaluate an interaction using OpenAI and Ionos evaluation services.
 
         Args:
+            domain_context (str): Domain context of the conversation.
             user_input (str): user input to evaluate.
             generated_reply (str): The generated agent reply.
             reference_reply (str): The reference agent reply.
@@ -418,6 +420,7 @@ class ConversationSimulator(BaseProcess):
 
         if judge_evaluator and self.providers:
             await self._judge_evaluation(
+                domain_context=domain_context,
                 user_input=user_input,
                 generated_reply=generated_reply,
                 reference_reply=reference_reply,
@@ -444,6 +447,7 @@ class ConversationSimulator(BaseProcess):
 
     async def _judge_evaluation(
             self,
+            domain_context: str,
             user_input: str,
             generated_reply: str,
             reference_reply: str,
@@ -455,6 +459,7 @@ class ConversationSimulator(BaseProcess):
         Run LLM-as-a-judge evaluation using multiple providers (async).
 
         Args:
+            domain_context (str): The domain context.
             user_input (str): The user input message.
             generated_reply (str): The generated agent reply.
             reference_reply (str): The reference agent reply.
@@ -469,6 +474,7 @@ class ConversationSimulator(BaseProcess):
 
         tasks = {
             provider: judge_evaluator.async_evaluate(
+                domain_context=domain_context,
                 generated_data=generated_reply,
                 reference_data=reference_reply,
                 user_input=user_input,

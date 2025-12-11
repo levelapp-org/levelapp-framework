@@ -37,6 +37,7 @@ class ConversationScript(BaseModel):
     """Represents a basic conversation with multiple interactions."""
     id: UUID = Field(default_factory=uuid4, description="Conversation identifier")
     interactions: List[Interaction] = Field(default_factory=list, description="List of interactions")
+    domain_context: str = Field(default="real_estate", description="Domain context of the conversation")
     description: str = Field(default="no-description", description="A short description of the conversation")
     details: Dict[str, str] = Field(default_factory=dict, description="Conversation details")
     variable_request_schema: bool = Field(default=False, description="The payload schema changes for each request")

@@ -1,7 +1,6 @@
 """levelapp/core/evaluator.py"""
 from functools import lru_cache
-from typing import List, Dict, Any, TYPE_CHECKING
-from pydantic import BaseModel, Field
+from typing import Dict, Any, TYPE_CHECKING
 
 from tenacity import (
     retry,
@@ -13,6 +12,7 @@ from tenacity import (
 )
 
 from levelapp.clients import ClientRegistry
+from levelapp.evaluator.schemas import JudgeEvaluationResults, Evidence
 from levelapp.comparator import MetricsManager, MetadataComparator
 from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE
 from levelapp.core.base import BaseEvaluator, BaseChatClient
@@ -20,54 +20,6 @@ from levelapp.aspects import MonitoringAspect, MetricType, logger, DataLoader
 
 if TYPE_CHECKING:
     from levelapp.workflow.config import WorkflowConfig
-
-
-class Evidence(BaseModel):
-    """Evidence details for evaluation."""
-    covered_points: List[str] = Field(
-        default_factory=list,
-        description="Key points covered the agent reply covered (<= 3 items)"
-    )
-    missing_or_wrong: List[str] = Field(
-        default_factory=list,
-        description="Key points the agent reply missed or contradicted (<= 3 items)"
-    )
-
-
-class JudgeEvaluationResults(BaseModel):
-    """Structured result of an interaction evaluation."""
-    provider: str = Field(..., description="The provider name, e.g., 'openai', 'ionos'")
-    score: int = Field(..., ge=0, le=3, description="Evaluation score between 0 and 3")
-    label: str = Field(..., description="The label of the evaluation result")
-    justification: str = Field(..., description="Short explanation of the evaluation result")
-    evidence: Evidence = Field(default_factory=Evidence, description="Detailed evidence for the evaluation")
-    raw_response: Dict[str, Any] = Field(..., description="Full unprocessed API response", exclude=True)
-    metadata: Dict[str, Any] = Field(..., description="Metadata about the evaluation result")
-
-    @classmethod
-    def from_parsed(cls, provider: str, parsed: Dict[str, Any], raw: Dict[str, Any]) -> "JudgeEvaluationResults":
-        """
-        Build a model instance from the provided data.
-
-        Args:
-            provider (str): The provider name.
-            parsed (Dict[str, Any]): The parsed response data.
-            raw (Dict[str, Any]): The raw response data.
-
-        Returns:
-            JudgeEvaluationResults: The constructed evaluation result instance.
-        """
-        content = parsed.get("output", {})
-        metadata = parsed.get("metadata", {})
-        return cls(
-            provider=provider,
-            score=content.get("score", 0),
-            label=content.get("label", "N/A"),
-            justification=content.get("justification", "N/A"),
-            evidence=Evidence(**content.get("evidence", {})),
-            raw_response=raw,
-            metadata=metadata,
-        )
 
 
 class JudgeEvaluator(BaseEvaluator):
@@ -103,7 +55,7 @@ class JudgeEvaluator(BaseEvaluator):
         return self.client_registry.get(provider=provider)
 
     @lru_cache(maxsize=1024)
-    def _build_prompt(self, user_input: str, generated_text: str, reference_text: str) -> str:
+    def _build_prompt(self, domain_context: str, user_input: str, generated_text: str, reference_text: str) -> str:
         """
         Build the prompt used for the evaluation.
 
@@ -116,6 +68,7 @@ class JudgeEvaluator(BaseEvaluator):
             A string containing the prompt.
         """
         return self.prompt_template.format(
+            domain_context=domain_context,
             user_input=user_input,
             generated_text=generated_text,
             reference_text=reference_text
@@ -177,6 +130,7 @@ class JudgeEvaluator(BaseEvaluator):
     @MonitoringAspect.monitor(name="judge_evaluation", category=MetricType.API_CALL)
     async def async_evaluate(
             self,
+            domain_context: str,
             generated_data: str,
             reference_data: str,
             user_input: str,
@@ -186,6 +140,7 @@ class JudgeEvaluator(BaseEvaluator):
         Synchronous evaluation for the generated data.
 
         Args:
+            domain_context (str): The domain context.
             generated_data (str): The generated data.
             reference_data (str): The reference data.
             user_input (str): The user input.
@@ -198,6 +153,7 @@ class JudgeEvaluator(BaseEvaluator):
             RetryError: If the evaluation failed.
         """
         prompt = self._build_prompt(
+            domain_context=domain_context,
             user_input=user_input,
             generated_text=generated_data,
             reference_text=reference_data

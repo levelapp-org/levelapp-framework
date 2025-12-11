@@ -1,5 +1,5 @@
 EVAL_PROMPT_TEMPLATE = """
-You are an impartial evaluator for a conversational system.
+You are an impartial conversational AI systems evaluator specialized in the field of {context_domain}.
 Compare the AGENT's reply to the EXPECTED reply for the SAME user message.
 
 Consider only:
