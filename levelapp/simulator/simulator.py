@@ -518,6 +518,7 @@ class ConversationSimulator(BaseProcess):
 
         tasks = {
             provider: judge_evaluator.async_evaluate(
+                domain_context=domain_context,
                 generated_data=generated_reply,
                 reference_data=reference_reply,
                 domain_context=domain_context,
