@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Summary Statistics -->
+<div class="summary-cards">
+    <div class="card">
+        <h3>Total Scripts</h3>
+        <div class="value">{{ summary_stats.total_scripts }}</div>
+        <div class="label">Evaluated</div>
+    </div>
+
+    <div class="card">
+        <h3>Overall Average</h3>
+        <div class="value">{{ "%.3f"|format(summary_stats.overall_average) }}</div>
+        <div class="label">Across all providers</div>
+    </div>
+
+    <div class="card">
+        <h3>Total Time</h3>
+        <div class="value">{{ "%.2f"|format(summary_stats.total_time) }}</div>
+        <div class="label">Seconds</div>
+    </div>
+
+    <div class="card">
+        <h3>Providers</h3>
+        <div class="value">{{ summary_stats.providers|length }}</div>
+        <div class="label">
+            {% for provider in summary_stats.providers %}
+            {% if provider not in ['processing_time', 'guardrail', 'metadata'] %}
+            <span class="badge badge-info">{{ provider|upper }}</span>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Summary Metrics Chart -->
+{% if charts.summary_metrics %}
+<div class="chart-section">
+    <h2>Key Metrics</h2>
+    {{ charts.summary_metrics|safe }}
+</div>
+{% endif %}
+
+<!-- Score Trends -->
+{% if charts.score_trend %}
+<div class="chart-section">
+    <h2>Score Trends</h2>
+    {{ charts.score_trend|safe }}
+</div>
+{% endif %}
+
+<!-- Provider Comparison -->
+{% if charts.provider_comparison %}
+<div class="chart-section">
+    <h2>Provider Comparison</h2>
+    {{ charts.provider_comparison|safe }}
+</div>
+{% endif %}
+
+<!-- Distribution Charts -->
+<div class="chart-section">
+    <h2>Score Distributions</h2>
+    <div class="chart-grid">
+        {% for key, chart in charts.items() %}
+        {% if key.startswith('distribution_') %}
+        {{ chart|safe }}
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Timeline -->
+{% if charts.timeline %}
+<div class="chart-section">
+    <h2>Processing Timeline</h2>
+    {{ charts.timeline|safe }}
+</div>
+{% endif %}
+
+<!-- Evaluation Summary -->
+{% if has_evaluation_summary and results.evaluation_summary %}
+<div class="chart-section">
+    <h2>Evaluation Summary</h2>
+    {% for provider, verdicts in results.evaluation_summary.items() %}
+    <div style="margin-bottom: 20px;">
+        <h3 style="color: #667eea;">{{ provider|upper }}</h3>
+        <ul style="list-style: none; padding-left: 0;">
+            {% for verdict in verdicts %}
+            <li style="padding: 8px; background: #f8f9fa; margin: 5px 0; border-left: 3px solid #667eea;">
+                {{ verdict }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Raw Data Section -->
+<div class="chart-section">
+    <h2>Detailed Results</h2>
+    <details>
+        <summary style="cursor: pointer; padding: 10px; background: #f8f9fa; border-radius: 5px;">
+            Click to view raw JSON data
+        </summary>
+        <pre
+            style="background: #f8f9fa; padding: 20px; border-radius: 5px; overflow-x: auto; margin-top: 10px;">{{ results.model_dump_json(indent=2) }}</pre>
+    </details>
+</div>
+{% endblock %}
