@@ -40,7 +40,7 @@ class ConversationScript(BaseModel):
     description: str = Field(default="no-description", description="A short description of the conversation")
     details: Dict[str, str] = Field(default_factory=dict, description="Conversation details")
     variable_request_schema: bool = Field(default=False, description="The payload schema changes for each request")
-    uuid_field: str | None = Field(default="conversationId", description="field that requires a UUID value")
+    uuid_field: str | None = Field(default=None, description="field that requires a UUID value")
 
 
 class ScriptsBatch(BaseModel):
