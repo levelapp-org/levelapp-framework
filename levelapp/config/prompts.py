@@ -1,19 +1,16 @@
+TASK_TAXONOMY = ["Information Query", "State Inquiry", "Content Synthesis", "Content Transformation",
+                 "Service Transaction", "System Control", "Sustained Dialogue", "Context Management"]
+
 EVAL_PROMPT_TEMPLATE = """
-You are an impartial conversational AI systems evaluator specialized in the field of {context_domain}.
-Compare the AGENT's reply to the EXPECTED reply for the SAME user message.
+You are an impartial, strict evaluator of conversational AI systems, specialized in {domain_context}.
+Your job is threefold:
+1. SCORE the AGENT's reply against the EXPECTED reply (primary task).
+2. EXTRACT metadata about the interaction (secondary task).
+3. ANALYZE pragmatic quality via Gricean Analysis Maxims (if enabled).
 
-Consider only:
-1) Semantic Coverage — does the AGENT cover the key points in EXPECTED?
-2) Faithfulness — no contradictions or invented details relative to EXPECTED.
-3) Appropriateness — tone/format suitable for the user message.
-Ignore minor wording/punctuation differences. Do NOT reward verbosity.
+Follow instructions PRECISELY. Be conservative: DEFAULT to lower scores, False, or "neutral" when uncertain.
 
-Scale (integer):
-0 = Poor (misses key points or contradicts)
-1 = Moderate (captures some ideas, noticeable gaps)
-2 = Good (mostly matches, minor omissions/differences)
-3 = Excellent (semantically equivalent; no meaningful differences)
-
+### INPUTS
 USER_MESSAGE:
 \"\"\"{user_input}\"\"\"
 
@@ -23,15 +20,67 @@ EXPECTED (reference reply):
 AGENT (model reply):
 \"\"\"{generated_text}\"\"\"
 
-Return ONLY a single JSON object on one line with exactly these keys:
-- "score": <0|1|2|3>,
-- "label": "<Poor|Moderate|Good|Excellent>",
-- "justification": "<1-2 concise sentences>",
-- "evidence":
-    - "covered_points": ["<short phrase>", "..."],   // <=3 items
-    - "missing_or_wrong": ["<short phrase>", "..."]  // <=3 items
-    
-Do NOT include any additional text, explanations, or formatting (e.g., "JSON object:", ```json or ```, or markdown).
+### INSTRUCTIONS
+
+#### A. SCORING (0-3 scale)
+- Semantic Coverage: key points covered?
+- Faithfulness: no contradictions/inventions?
+- Appropriateness: tone/format suitable?
+→ Score 0–3 (0=Poor, 3=Excellent). Ignore minor wording/punctuation. Do NOT reward verbosity.
+
+#### B. METADATA EXTRACTION (be precise!)
+- `task_type`: Infer the SINGLE most likely task from USER_MESSAGE using ONLY these categories:
+{task_taxonomy}
+  If none apply, use "other".
+- `task_success`: Did the AGENT successfully fulfill the user's request?
+  → True *only if* the reply completes the task (e.g., provides info, confirms booking, resolves issue).
+  → False if: partial info, deflection, hallucination, refusal without justification, or irrelevant.
+  → Default to False if uncertain.
+- `user_sentiment`: Analyze ONLY the USER_MESSAGE. Choose ONE:
+  "negative" (frustrated, angry, urgent),
+  "neutral" (factual, inquiry),
+  "positive" (happy, grateful, encouraging).
+  → Default to "neutral" if uncertain.
+
+#### C. GRICEAN ANALYSIS
+Evaluate AGENT reply against Grice's Cooperative Principle.
+For each maxim:
+- `violated`: true/false (strict standard)
+- `justification`: ≤15 words; quote evidence if possible.
+
+Maxims:
+1. Quantity: "As informative as required — no more, no less."
+2. Quality: "Do not say what is false or unsupported."
+3. Relation: "Be relevant to the user's goal."
+4. Manner: "Be clear, brief, and orderly."
+
+→ Default to `violated: false` ONLY if clearly adhered to.
+
+### OUTPUT FORMAT
+Return ONLY a single JSON object on one line with EXACTLY these keys:
+
+{{
+  "score": <0|1|2|3>,
+  "label": "<Poor|Moderate|Good|Excellent>",
+  "justification": "<1-2 sentences, ≤30 words total>",
+  "evidence": {{
+    "covered_points": ["<≤3 short phrases>"],
+    "missing_or_wrong": ["<≤3 short phrases>"]
+  }},
+  "task_metadata": {{
+    "task_type": "<str>",
+    "task_success": <true|false>,
+    "user_sentiment": "<negative|neutral|positive>"
+  }},
+  "gricean": {{
+    "quantity": {{ "violated": <true|false>, "justification": "<≤15 words>" }},
+    "quality": {{ "violated": <true|false>, "justification": "<≤15 words>" }},
+    "relation": {{ "violated": <true|false>, "justification": "<≤15 words>" }},
+    "manner": {{ "violated": <true|false>, "justification": "<≤15 words>" }}
+  }}
+}}
+
+Do NOT include any other text, markdown, or formatting (e.g., no ```json, no comments).
 """
 
 

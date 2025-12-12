@@ -474,9 +474,9 @@ class ConversationSimulator(BaseProcess):
 
         tasks = {
             provider: judge_evaluator.async_evaluate(
-                domain_context=domain_context,
                 generated_data=generated_reply,
                 reference_data=reference_reply,
+                domain_context=domain_context,
                 user_input=user_input,
                 provider=provider,
             )
@@ -487,7 +487,9 @@ class ConversationSimulator(BaseProcess):
 
         for provider, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
-                logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation.")
+                logger.error(
+                    f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation:\n{result}", exc_info=True
+                )
                 continue
 
             evaluation_results.judge_evaluations[provider] = result

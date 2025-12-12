@@ -14,7 +14,7 @@ from tenacity import (
 from levelapp.clients import ClientRegistry
 from levelapp.evaluator.schemas import JudgeEvaluationResults, Evidence
 from levelapp.comparator import MetricsManager, MetadataComparator
-from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE
+from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE, TASK_TAXONOMY
 from levelapp.core.base import BaseEvaluator, BaseChatClient
 from levelapp.aspects import MonitoringAspect, MetricType, logger, DataLoader
 
@@ -69,6 +69,7 @@ class JudgeEvaluator(BaseEvaluator):
         """
         return self.prompt_template.format(
             domain_context=domain_context,
+            task_taxonomy=TASK_TAXONOMY,
             user_input=user_input,
             generated_text=generated_text,
             reference_text=reference_text
@@ -82,6 +83,7 @@ class JudgeEvaluator(BaseEvaluator):
     )
     def evaluate(
             self,
+            domain_context: str,
             generated_data: str,
             reference_data: str,
             user_input: str,
@@ -91,6 +93,7 @@ class JudgeEvaluator(BaseEvaluator):
         Synchronous evaluation for the generated data.
 
         Args:
+            domain_context (str): The domain context.
             generated_data (str): The generated data.
             reference_data (str): The reference data.
             user_input (str): The user input.
@@ -103,6 +106,7 @@ class JudgeEvaluator(BaseEvaluator):
             Exception: If the evaluation failed.
         """
         prompt = self._build_prompt(
+            domain_context=domain_context,
             user_input=user_input,
             generated_text=generated_data,
             reference_text=reference_data
@@ -124,7 +128,7 @@ class JudgeEvaluator(BaseEvaluator):
                 justification="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
                 raw_response={},
-                metadata={}
+                task_metadata=None
             )
 
     @MonitoringAspect.monitor(name="judge_evaluation", category=MetricType.API_CALL)
@@ -181,7 +185,7 @@ class JudgeEvaluator(BaseEvaluator):
                 justification="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
                 raw_response={},
-                metadata={}
+                task_metadata=None
             )
 
 
