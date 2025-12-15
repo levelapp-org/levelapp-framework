@@ -57,6 +57,9 @@ evaluation:
   providers:
     - openai
     - ionos
+    - mistral
+    - grok
+    - gemini
   metrics_map:
     field_1: EXACT
     field_2 : LEVENSHTEIN
@@ -127,20 +130,23 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
 {
   "scripts": [
     {
+      "variable_request_schema": false,
       "interactions": [
         {
           "user_message": "Hello, I would like to book an appointment with a doctor.",
           "reference_reply": "Sure, I can help with that. Could you please specify the type of doctor you need to see?",
           "interaction_type": "initial",
           "reference_metadata": {},
-          "guardrail_flag": false
+          "guardrail_flag": false,
+          "request_payload": {}
         },
         {
           "user_message": "I need to see a cardiologist.",
           "reference_reply": "When would you like to schedule your appointment?",
           "interaction_type": "intermediate",
           "reference_metadata": {},
-          "guardrail_flag": false
+          "guardrail_flag": false,
+          "request_payload": {}
         },
         {
           "user_message": "I would like to book it for next Monday morning.",
@@ -151,7 +157,8 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
             "date": "next Monday",
             "time": "10 AM"
           },
-          "guardrail_flag": false
+          "guardrail_flag": false,
+          "request_payload": {}
         },
         {
           "id": "f4f2dd35-71d7-4b75-ba2b-93a4f546004a",
@@ -159,7 +166,8 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
           "reference_reply": "Your appointment with the cardiologist is booked for 10 AM next Monday. Is there anything else I can help you with?",
           "interaction_type": "final",
           "reference_metadata": {},
-          "guardrail_flag": false
+          "guardrail_flag": false,
+          "request_payload": {}
         }
       ],
       "description": "A conversation about booking a doctor appointment.",
@@ -170,20 +178,41 @@ For conversation scripts (used in Simulator), provide a JSON file with this sche
   ]
 }
 ```
-- **Fields**: Include user messages, reference/references replies, metadata for comparison, guardrail flags, and request payloads.
+- **Fields**: 
+  - **Scripts Level**:
+    - **description**: a brief description of the script.
+    - **details**: any additioanl information.
+    - **variable_request_schema**: a flag variable that defaults to `False`. 
+    When changed to True, it allows the user to pass the request payload content directly from the reference file
+    ignoring any configuration made in the YAML.
+    - **Interactions**: A list of single-turn conversation data for the simulation and evaluation process:
+      - **user_message_path**: If `variable_request_schema` is `True`, the user must indicate the path of the user message
+      in the attached **request_payload** dict. Example: ```"user_message_path": "user.message"``` 
+      for "request_payload": ```{"user": {"message": Hello, world!", "role": "user"}}```.
+      - **user_message**: The text content that will be used as a user message for the simulation,
+      - **reference_reply**: the text content of the reference reply. 
+      - **reference_metadata**: a dict containing the reference metadata. 
+      - **guardrail flags**: Guardrail flag (`True`/`False`). 
+      - **request payloads**: A dict containing the request payload that must be sent for each turn.
 
 In the `.env` you need to add the LLM providers credentials that will be used for the evaluation process. 
 ```
+# Add the API key for any used provider:
 OPENAI_API_KEY=
 IONOS_API_KEY=
 ANTHROPIC_API_KEY=
 MISTRAL_API_KEY=
+GEMINI_API_KEY=
+GROK_API_KEY=
+
+# Include the model of choice for any used provider:
+OPENAI_MODEL= "gpt-4o-mini"
+GROK_MODEL = "llama-3.3-70b-versatile"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # For IONOS, you must include the base URL and the model ID.
-IONOS_BASE_URL="https://inference.de-txl.ionos.com"
-IONOS_MODEL_ID="0b6c4a15-bb8d-4092-82b0-f357b77c59fd"
-
-WORKFLOW_CONFIG_PATH="../../src/data/workflow_config_1.yaml"
+IONOS_BASE_URL="https://openai.inference.de-txl.ionos.com"
+IONOS_MODEL_ID="meta-llama/Llama-3.3-70B-Instruct"
 ```
 
 ## Usage Example
@@ -354,6 +383,11 @@ if __name__ == "__main__":
 - This loads the config, runs the specified workflow (e.g., Simulator), collects results, and prints stats.
 
 For more examples, see the `examples/` directory.
+
+Or, Check the following Colab Notebook for an easy and quick demo:<br>
+| Notebook                                                                                                                                                            | Description                        |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------       |------------------------------      |
+| [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1tD2ljiBkrTxSfeRObTBrc2UmZvzqEuRU?usp=sharing) | Tutorial Notebook with UI widgets  |
 
 ## Visualization
 
