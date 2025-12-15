@@ -385,9 +385,9 @@ if __name__ == "__main__":
 For more examples, see the `examples/` directory.
 
 Or, Check the following Colab Notebook for an easy and quick demo:<br>
-| Notebook                                                                                                                                                            | Description                        |
-|--------------------------------------------------------------------------------------------------------------------------------------------------------------       |------------------------------      |
-| [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1tD2ljiBkrTxSfeRObTBrc2UmZvzqEuRU?usp=sharing) | Tutorial Notebook with UI widgets  |
+| Notebook                                                                                                                                                                                | Description                        |                                                                                                                                                                    |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [Quick-tour of LevelApp framework](https://github.com/levelapp-org/levelapp-framework/examples/conversation_evaluation_example/LevelApp_Conversation_Simulator_Notebook.ipynb)          | Tutorial Notebook with UI widgets  |[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1tD2ljiBkrTxSfeRObTBrc2UmZvzqEuRU?usp=sharing) |
 
 ## Visualization
 
