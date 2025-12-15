@@ -384,6 +384,11 @@ if __name__ == "__main__":
 
 For more examples, see the `examples/` directory.
 
+Or, Check the following Colab Notebook for an easy and quick demo:<br>
+| Notebook                                                                                                                                                            | Description                        |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------       |------------------------------      |
+| [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1tD2ljiBkrTxSfeRObTBrc2UmZvzqEuRU?usp=sharing) | Tutorial Notebook with UI widgets  |
+
 ## Visualization
 
 LevelApp includes powerful visualization capabilities to help you analyze and present evaluation results through interactive charts and dashboards.
