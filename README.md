@@ -355,6 +355,104 @@ if __name__ == "__main__":
 
 For more examples, see the `examples/` directory.
 
+## Visualization
+
+LevelApp includes powerful visualization capabilities to help you analyze and present evaluation results through interactive charts and dashboards.
+
+### Features
+
+- **Automatic Dashboard Generation**: Create comprehensive HTML dashboards with all evaluation metrics
+- **Multi-Format Export**: Export visualizations in HTML and PNG formats.
+- **Interactive Charts**: Generate interactive Plotly charts for detailed analysis
+- **Provider Comparison**: Compare performance across different LLM providers
+- **Score Trends**: Visualize score trends across conversation scripts
+- **Distribution Analysis**: Analyze score distributions for individual providers
+- **Summary Metrics**: Display key performance indicators and statistics
+
+### Installation
+
+To use visualization features, install the required dependencies:
+
+```bash
+pip install plotly kaleido jinja2
+```
+
+These dependencies enable:
+- `plotly`: Interactive chart generation
+- `kaleido`: Static image export (PNG, PDF)
+- `jinja2`: HTML dashboard templating
+
+### Basic Usage
+
+Generate visualizations directly from an evaluation session:
+
+```python
+from levelapp.core.session import EvaluationSession
+from levelapp.workflow import WorkflowConfig
+
+# Load configuration
+config = WorkflowConfig.load(path="workflow_config.yaml")
+
+# Run evaluation with visualization
+with EvaluationSession(
+    session_name="my-evaluation",
+    workflow_config=config,
+    enable_monitoring=True
+) as session:
+    # Run the evaluation
+    session.run()
+    
+    # Generate visualizations
+    files = session.visualize_results(
+        output_dir="./visualization_output",
+        formats=["html", "png"]
+    )
+    
+    # Access generated files
+    print(f"Dashboard: {files['html']}")
+    print(f"Charts: {files['png']}")
+```
+
+### Available Chart Types
+
+1. **Provider Comparison**: Bar charts comparing average scores across LLM providers
+2. **Score Trend**: Line charts showing score progression across conversation scripts
+3. **Score Distribution**: Histograms showing score distribution for specific providers
+4. **Summary Metrics**: Key performance indicators and aggregate statistics
+
+### Customization
+
+Customize visualizations by:
+
+- **Themes**: Choose from Plotly themes (`plotly`, `plotly_white`, `plotly_dark`, `ggplot2`, `seaborn`, etc.)
+- **Export Formats**: Select from `html` or `png`.
+- **Output Directory**: Specify custom paths for generated files
+- **Chart Layout**: Modify chart properties through the ChartGenerator API
+
+Example with custom theme:
+
+```python
+# Use dark theme for all charts
+chart_gen = ChartGenerator(theme="plotly_dark")
+
+# Generate with custom settings
+files = session.visualize_results(
+    output_dir="./reports",
+    formats=["html", "png", "pdf"],
+    theme="plotly_dark"
+)
+```
+
+### Example Output
+
+The visualization module generates:
+
+- **Interactive HTML Dashboard**: Complete evaluation report with all charts and metrics
+- **Static Images**: PNG/PDF exports for presentations and reports
+- **JSON Data**: Raw data export for custom processing
+
+For complete examples, see the `examples/visualization_example/` directory.
+
 ## Documentation
 
 Detailed docs are in the `docs/` directory, including API references and advanced configuration.
