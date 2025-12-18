@@ -19,7 +19,8 @@ from levelapp.simulator.schemas import (
     InteractionEvaluationResults,
     ScriptsBatch,
     ConversationScript,
-    SimulationResults, TurnSummary, SingleInteractionResults, SingleAttemptResults, AllAttemptsResults
+    SimulationResults, TurnSummary,
+    SimulationResults, SingleInteractionResults, SingleAttemptResults, AllAttemptsResults
 )
 from levelapp.simulator.utils import (
     calculate_average_scores,
