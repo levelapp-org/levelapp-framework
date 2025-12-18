@@ -578,12 +578,9 @@ class ConversationSimulator(BaseProcess):
         sentiment = Counter(sentiments).most_common(1)[0][0]
 
         # TODO-0: Change 'all_facts' to 'all_verdicts'
-        all_facts = set()
+        all_verdicts = []
         for jr in judge_results.values():
-            facts = jr.justification
-            all_facts.update(facts)
-
-        key_facts = list(all_facts)
+            all_verdicts.append(jr.justification)
 
         return TurnSummary(
             turn_index=turn_index,
@@ -594,7 +591,7 @@ class ConversationSimulator(BaseProcess):
             engagement=consensus_engagement,
             gricean_violations=consensus_gricean,
             sentiment=sentiment,
-            key_facts=key_facts,
+            key_facts=all_verdicts,
             guardrail_triggered=guardrail_triggered,
         )
 
