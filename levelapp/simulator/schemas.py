@@ -61,6 +61,7 @@ class InteractionEvaluationResults(BaseModel):
     """Model representing the evaluation result of an interaction."""
     judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(default_factory=dict)
     metadata_evaluation: Dict[str, float] | None = Field(default_factory=dict)
+    similarity_evaluation: Dict[str, float] | None = Field(default_factory=dict)
     guardrail_flag: int | None = Field(default=None)
     errors: Dict[str, Any] | None = Field(default_factory=dict)
 
