@@ -36,7 +36,7 @@ class OpenAIClient(BaseChatClient):
         Returns:
             str: "/chat/completions"
         """
-        return "/chat/completions"
+        return "/responses"
 
     def _build_endpoint(self) -> str:
         """
@@ -71,8 +71,8 @@ class OpenAIClient(BaseChatClient):
         """
         return {
             "model": self.model,
-            "messages": [{"role": "user", "content": message}],
-            "max_tokens": self.max_tokens,
+            "input": message,
+            "max_output_tokens": self.max_tokens,
         }
 
     def parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,8 +95,22 @@ class OpenAIClient(BaseChatClient):
                 }
             }
         """
-        input_tokens = response.get("usage", {}).get("prompt_tokens", 0)
-        output_tokens = response.get("usage", {}).get("completion_tokens", 0)
-        output = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        parsed = self.sanitizer.safe_load_json(text=output)
-        return {"output": parsed, "metadata": {"input_tokens": input_tokens, "output_tokens": output_tokens}}
+        usage = response.get("usage", {})
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+
+        output_text = ""
+        for item in response.get("output", []):
+            for block in item.get("content", []):
+                if block.get("type") == "output_text":
+                    output_text += block.get("text", "")
+
+        parsed = self.sanitizer.safe_load_json(text=output_text)
+
+        return {
+            "output": parsed,
+            "metadata": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+        }
