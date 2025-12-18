@@ -14,11 +14,12 @@ from levelapp.endpoint.client import EndpointConfig
 from levelapp.endpoint.manager import EndpointConfigManager
 
 from levelapp.core.schemas import EvaluatorType
+from levelapp.evaluator.schemas import JudgeEvaluationResults
 from levelapp.simulator.schemas import (
     InteractionEvaluationResults,
     ScriptsBatch,
     ConversationScript,
-    SimulationResults
+    SimulationResults, TurnSummary
 )
 from levelapp.simulator.utils import (
     calculate_average_scores,
@@ -284,7 +285,7 @@ class ConversationSimulator(BaseProcess):
         logger.info(f"{_LOG} Contextual Mode ON: {contextual_mode}")
         interactions = script.interactions
 
-        for interaction in interactions:
+        for idx, interaction in enumerate(interactions):
             request_payload = interaction.request_payload.copy()
             if contextual_mode:
                 from levelapp.simulator.utils import set_by_path
@@ -360,6 +361,15 @@ class ConversationSimulator(BaseProcess):
                 reference_guardrail=reference_guardrail_flag,
             )
 
+            if evaluation_results.judge_evaluations:
+                turn_summary = self.canonicalize_turn_summary(
+                    judge_results=evaluation_results.judge_evaluations,
+                    turn_index=idx,
+                    guardrail_triggered=extracted_guardrail_flag,
+                )
+            else:
+                turn_summary = None
+
             self.store_evaluation_results(
                 results=evaluation_results,
                 evaluation_verdicts=evaluation_verdicts,
@@ -378,6 +388,7 @@ class ConversationSimulator(BaseProcess):
                 "reference_metadata": reference_metadata,
                 "guardrail_details": extracted_guardrail_flag,
                 "evaluation_results": evaluation_results.model_dump(),
+                "turn_summary": turn_summary.model_dump(),
             }
 
             results.append(result)
@@ -519,6 +530,73 @@ class ConversationSimulator(BaseProcess):
             )
         except Exception as e:
             logger.error(f"{_LOG} Metadata evaluation failed:\n{e}", exc_info=e)
+
+    def canonicalize_turn_summary(
+            self,
+            judge_results: Dict[str, JudgeEvaluationResults],
+            turn_index: int,
+            guardrail_triggered: bool = False
+    ) -> TurnSummary | None:
+        """
+        Compute a consensus TurnSummary from multiple judge evaluations.
+
+        Strategy:
+            - score: mean of provider scores (rounded to 0.5)
+            - engagement: mean of engagement scores.
+            - gricean_violations: majority vote per maxim -> total count
+            - task_type: most frequent (fallback: first)
+            - task_success: All user_message (independent of judges)
+            - key_facts: union of extracted facts (de-duplicated)
+        """
+        _LOG: str = f"[{self._CLASS_NAME}][canonicalize_turn_summary]"
+
+        if not judge_results:
+            logger.warning(f"{_LOG} No judge results. Using defaults for TurnSummary.")
+            return TurnSummary(turn_index=turn_index, role="A", score=0, engagement=0, gricean_violations=0)
+
+        providers = list(judge_results.keys())
+        first = judge_results[providers[0]]
+
+        # 1. Aggregate scalar scores:
+        scores = [jr.score for jr in judge_results.values()]
+        engagements = [jr.engagement_score for jr in judge_results.values()]
+        gricean_counts = [jr.gricean.violation_count for jr in judge_results.values()]
+
+        consensus_score = round(sum(scores) / len(scores) * 2) / 2  # Needs to be verified
+        consensus_engagement = round(sum(engagements) / len(engagements), 3)
+        consensus_gricean = round(sum(gricean_counts) / len(gricean_counts))
+
+        # 2. Task metadata:
+        task_types = [jr.task_metadata.task_type for jr in judge_results.values()]
+
+        from collections import Counter
+        task_type = Counter(task_types).most_common(1)[0][0]
+
+        # 2.1. Task success & sentiment require ALL judges to say True (unanimous) to avoid false positives
+        task_success = all(jr.task_metadata.task_success for jr in judge_results.values())
+        sentiments = [jr.task_metadata.user_sentiment for jr in judge_results.values()]
+        sentiment = Counter(sentiments).most_common(1)[0][0]
+
+        # TODO-0: Change 'all_facts' to 'all_verdicts'
+        all_facts = set()
+        for jr in judge_results.values():
+            facts = jr.justification
+            all_facts.update(facts)
+
+        key_facts = list(all_facts)
+
+        return TurnSummary(
+            turn_index=turn_index,
+            role="A",
+            task_type=task_type,
+            task_success=task_success,
+            score=consensus_score,
+            engagement=consensus_engagement,
+            gricean_violations=consensus_gricean,
+            sentiment=sentiment,
+            key_facts=key_facts,
+            guardrail_triggered=guardrail_triggered,
+        )
 
     @staticmethod
     def store_evaluation_results(

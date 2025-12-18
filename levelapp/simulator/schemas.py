@@ -95,6 +95,7 @@ class TurnSummary(BaseModel):
     engagement: float = Field(ge=0, le=1, description="Turn engagement (0.0-1.0)")
     gricean_violations: int = Field(ge=0, le=4, description="Gricean maxims violated (0-4)")
     sentiment: str = Field(default="neutral", description="User sentiment (if role='U')")
+    # TODO-0: Change 'key_facts' to 'justification' (which will be changed to 'verdicts')
     key_facts: List[str] = Field(default_factory=list, description="Extracted facts for retention")
     guardrail_triggered: bool = Field(default=False, description="Guardrail flag raised?")
 
