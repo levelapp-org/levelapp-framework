@@ -27,7 +27,7 @@ class AnthropicClient(BaseChatClient):
         self.version = kwargs.get('version') or "2023-06-01"
         self.base_url = kwargs.get("base_url") or "https://api.anthropic.com/v1"
         self.api_key = kwargs.get('api_key') or os.environ.get('ANTHROPIC_API_KEY')
-        self.max_tokens = kwargs.get('max_tokens') or 1024
+        self.max_tokens = kwargs.get('max_tokens') or 4096
 
         if not self.api_key:
             raise ValueError("Anthropic API key not set.")

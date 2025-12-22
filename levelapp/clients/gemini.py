@@ -23,7 +23,7 @@ class GeminiClient(BaseChatClient):
         self.model = kwargs.get('model') or os.environ.get("GEMINI_MODEL")
         self.base_url = kwargs.get('base_url') or "https://generativelanguage.googleapis.com/v1beta"
         self.api_key = kwargs.get('api_key') or os.environ.get('GEMINI_API_KEY')
-        self.max_tokens = kwargs.get('max_tokens') or 1024
+        self.max_tokens = kwargs.get('max_tokens') or 4096
 
         if not self.api_key:
             raise ValueError("Gemini API key not set")

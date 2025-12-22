@@ -22,7 +22,7 @@ class GroqClient(BaseChatClient):
         self.model = kwargs.get('model') or os.environ.get('GROK_MODEL')
         self.base_url = kwargs.get('base_url') or "https://api.groq.com/openai/v1"
         self.api_key = kwargs.get('api_key') or os.environ.get('GROQ_API_KEY')
-        self.max_tokens = kwargs.get('max_tokens') or 1024
+        self.max_tokens = kwargs.get('max_tokens') or 4096
 
         if not self.api_key:
             raise ValueError("Groq API key not set")

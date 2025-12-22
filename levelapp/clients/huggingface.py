@@ -43,7 +43,7 @@ class HuggingFaceClient(BaseChatClient):
         self.model = kwargs.get("model") or "openai/gpt-oss-120b"
         self.base_url = kwargs.get("base_url") or "https://router.huggingface.co/v1"
         self.api_key = kwargs.get("api_key") or os.getenv("HF_TOKEN")
-        self.max_tokens = kwargs.get("max_tokens") or 1024
+        self.max_tokens = kwargs.get("max_tokens") or 4096
 
         _provider = os.getenv("HUGGINGFACE_PROVIDER")
         self.provider = kwargs.get("provider") or _provider or "auto"

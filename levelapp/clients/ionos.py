@@ -30,7 +30,7 @@ class IonosClient(BaseChatClient):
         self.top_k = kwargs.get('top_k') or 5
         self.top_p = kwargs.get('top_p') or 0.5
         self.temperature = kwargs.get('temperature') or 0.0
-        self.max_tokens = kwargs.get('max_tokens') or 150
+        self.max_tokens = kwargs.get('max_tokens') or 4096
 
         if not self.api_key:
             raise ValueError("IONOS API key not set.")
