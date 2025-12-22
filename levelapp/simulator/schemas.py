@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, computed_field
 from levelapp.evaluator.evaluator import JudgeEvaluationResults
 
 
+# Input DTOs:
 class InteractionLevel(str, Enum):
     """Enum representing the type of interaction."""
     INITIAL = "initial"
@@ -49,40 +50,12 @@ class ScriptsBatch(BaseModel):
     scripts: List[ConversationScript] = Field(default_factory=list, description="List of conversation scripts")
 
 
-# ---- Interaction Details Models ----
-class InteractionResults(BaseModel):
-    """Represents metadata extracted from a VLA interaction."""
-    generated_reply: str | None = "No response"
-    generated_metadata: Dict[str, Any] | None = {}
-    guardrail_flag: Any | None = False
-    interaction_type: str | None = ""
-
-
+# Output DTOs:
 class InteractionEvaluationResults(BaseModel):
     """Model representing the evaluation result of an interaction."""
-    judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(default_factory=dict)
-    metadata_evaluation: Dict[str, float] | None = Field(default_factory=dict)
-    guardrail_flag: int = Field(default=0)
-
-
-class SimulationResults(BaseModel):
-    # Collected data
-    started_at: datetime = datetime.now()
-    finished_at: datetime
-    # Collected Results
-    evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
-    average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
-    interaction_results: List[Dict[str, Any]] | None = Field(default_factory=list, description="detailed results")
-
-    @computed_field
-    @property
-    def batch_id(self) -> str:
-        return str(uuid4())
-
-    @computed_field
-    @property
-    def elapsed_time(self) -> float:
-        return (self.finished_at - self.started_at).total_seconds()
+    judge_evaluations: Dict[str, JudgeEvaluationResults] = Field(default_factory=dict)
+    metadata_evaluation: Dict[str, float] = Field(default_factory=dict)
+    guardrail_flag: int | None = Field(default=None)
 
 
 class TurnSummary(BaseModel):
@@ -122,3 +95,55 @@ class TurnSummary(BaseModel):
             parts.append(facts_line)
 
         return " ".join(parts)
+
+
+# ---- Interaction Details Models ----
+class SingleInteractionResults(BaseModel):
+    """Represents metadata extracted from a VLA interaction."""
+    conversation_id: str = Field(description="Conversation identifier")
+    user_message: str = Field(default="", description="The user's query message")
+    generated_reply: str = Field(default="Interaction request failed", description="The generated reply message")
+    reference_reply: str = Field(default="", description="The preset reference message")
+    generated_metadata: Dict[str, Any] = Field(default_factory=dict, description="Extracted metadata")
+    reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
+    guardrail_details: bool | None = Field(default=None, description="Flag for guardrail signaling")
+    evaluation_results: InteractionEvaluationResults = Field(default_factory=InteractionEvaluationResults)
+    turn_summary: TurnSummary | None = Field(default=None)
+
+
+class SingleAttemptResults(BaseModel):
+    attempt_nbr: int = Field(default=1, description="The attempt number")
+    attempt_id: str = Field(default=None, description="The attempt ID")
+    script_id: str = Field(default=None, description="The script ID")
+    total_duration: float = Field(default=None, description="Total duration")
+    interaction_results: List[SingleInteractionResults] = Field(default_factory=list)
+    evaluation_verdicts: Dict[str, List[str]] = Field(default_factory=dict)
+    average_scores: Dict[str, float] = Field(default_factory=dict)
+    interaction_summaries: List[str] = Field(default_factory=list)
+
+
+# TODO-1: Change to 'ConversationResults'.
+class AllAttemptsResults(BaseModel):
+    script_id: str = Field(default=None, description="The script ID")
+    attempts: List[SingleAttemptResults] = Field(default_factory=list)
+    average_scores: Dict[str, float] = Field(default_factory=dict)
+
+
+class SimulationResults(BaseModel):
+    # Collected data
+    started_at: datetime = datetime.now()
+    finished_at: datetime
+    # Collected Results
+    evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
+    average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
+    script_results: Any | None = Field(default_factory=list, description="detailed results")
+
+    @computed_field
+    @property
+    def batch_id(self) -> str:
+        return str(uuid4())
+
+    @computed_field
+    @property
+    def elapsed_time(self) -> float:
+        return (self.finished_at - self.started_at).total_seconds()
