@@ -135,14 +135,20 @@ class ConversationSimulator(BaseProcess):
         script_results: List[AllAttemptsResults] = conversation_results["script_results"]
 
         batch_verdicts: Dict[str, List[str]] = defaultdict(list)
+        interaction_summaries: List[str] = []
 
         for script in script_results:
             for attempt in script.attempts:
+                interaction_summaries.extend(attempt.interaction_summaries)
                 for judge, verdicts in attempt.evaluation_verdicts.items():
                     batch_verdicts[judge].extend(verdicts)
 
         verdict_summaries: Dict[str, List[str]] = {
-            judge: summarize_verdicts(verdicts=verdicts, judge=judge)
+            judge: summarize_verdicts(
+                interaction_summaries=interaction_summaries,
+                verdicts=verdicts,
+                judge=judge
+            )
             for judge, verdicts in batch_verdicts.items()
         }
 

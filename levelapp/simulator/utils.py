@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Union
 
 
 from levelapp.clients import ClientRegistry
-from levelapp.config.prompts import SUMMARIZATION_PROMPT_TEMPLATE
+from levelapp.config.prompts import MULTI_TURN_EVALUATION_PROMPT_TEMPLATE
 from levelapp.aspects import MonitoringAspect, MetricType, logger
 
 
@@ -101,6 +101,7 @@ def calculate_average_scores(scores: Dict[str, Union[List[float], float]]) -> Di
 
 @MonitoringAspect.monitor(name="summarization", category=MetricType.API_CALL)
 def summarize_verdicts(
+        interaction_summaries: List[str],
         verdicts: List[str],
         judge: str,
         max_bullets: int = 5
@@ -110,25 +111,49 @@ def summarize_verdicts(
 
     try:
         verdicts = chr(10).join(verdicts)
-        prompt = SUMMARIZATION_PROMPT_TEMPLATE.format(max_bullets=max_bullets, judge=judge, verdicts=verdicts)
+        dialogue_trace = chr(10).join(interaction_summaries)
+
+        prompt = MULTI_TURN_EVALUATION_PROMPT_TEMPLATE.format(
+            dialogue_trace=dialogue_trace,
+            judge=judge,
+            verdicts=verdicts,
+            max_bullets=max_bullets,
+        )
+
         response = client.call(message=prompt)
         parsed = client.parse_response(response=response)
-        striped = parsed.get("output", "").strip("")
-        bullet_points = [point.strip() for point in striped.split("- ") if point.strip()]
+        # striped = parsed.get("output", "").strip("")
+        # bullet_points = [point.strip() for point in striped.split("- ") if point.strip()]
 
-        return bullet_points[:max_bullets]
+        return parsed
 
     except Exception as e:
         logger.error(f"[summarize_justifications] Error during summarization: {str(e)}", exc_info=True)
         return []
 
 
-# if __name__ == '__main__':
-#     template = {'generated_reply': '${agent_reply}', 'generated_metadata': '${generated_metadata}'}
-#     response_dict = {
-#         'agent_reply': "I'd be happy to help you book something for 10 AM.",
-#         'generated_metadata': {'appointment_type': 'Cardiology', 'date': 'next Monday', 'time': '10 AM'}
-#     }
-#
-#     result = extract_interaction_details(response_dict, template)
-#     print(f"result: {result.model_dump()}")
+if __name__ == '__main__':
+    interaction_summaries = [
+        "[T0][A][task=Information Query][s=3.0][e=0.80][g=0]] Facts: [The agent provided comprehensive information and invited further questions., All key points covered]",
+        "[T1][A][task=Service Transaction][s=3.0][e=0.80][g=0]] Facts: [The AGENT response precisely matches the expected reply., Exact match, The agent's reply is identical to the expected reply, perfectly confirming the surgical appointment requested by the user.]",
+        "[T2][A][task=Information Query][s=3.0][e=0.80][g=0]] Facts: [The agent's reply closely matches the expected reply with precise information., Accurate and sufficient]"
+    ]
+
+    judge = "gemini"
+
+    verdicts = [
+        "The AGENT's reply fully matches and addresses the user's inquiry.",
+        "The agent's reply matches the expected confirmation of the appointment.",
+        "The AGENT's reply matches the EXPECTED response perfectly."
+    ]
+
+    max_bullets = 5
+
+    summary = summarize_verdicts(
+        interaction_summaries=interaction_summaries,
+        judge=judge,
+        verdicts=verdicts,
+        max_bullets=max_bullets
+    )
+
+    print(summary)
