@@ -203,8 +203,14 @@ class TurnSummary(BaseModel):
         role_tag = "U" if self.role == "U" else "A"
         sent_tag = f"[sent={self.sentiment}]" if self.role == "U" else ""
 
-        header = (f"[T{self.turn_index}][{role_tag}][task={self.task_type}][s={self.score:.1f}]"
-                  f"[e={self.engagement:.2f}][g={self.gricean_violations}]{sent_tag}]")
+        header = (
+            f"[T{self.turn_index}]"
+            f"[{role_tag}]"
+            f"[task={self.task_type}]"
+            f"[s={self.score:.1f}]"
+            f"[e={self.engagement:.2f}]"
+            f"[g={self.gricean_violations}]"
+            f"{sent_tag}]")
 
         facts_line = f"Facts: [{', '.join(self.key_facts)}]" if self.key_facts else ""
 
