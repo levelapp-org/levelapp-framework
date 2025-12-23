@@ -1,14 +1,43 @@
 """
 'simulators/aspects.py': Utility functions for handling VLA interactions and requests.
 """
-import httpx
-
 from typing import Any, Dict, List, Union
-
+from pydantic import BaseModel, Field, ValidationError
 
 from levelapp.clients import ClientRegistry
 from levelapp.config.prompts import MULTI_TURN_EVALUATION_PROMPT_TEMPLATE
 from levelapp.aspects import MonitoringAspect, MetricType, logger
+
+
+class ContextRetention(BaseModel):
+    score: float = Field(default=-1, description="Context retention score.")
+    issues: List[str] = Field(default_factory=list, description="List of identified issues.")
+
+
+class GriceanMetric(BaseModel):
+    violated: bool | None = Field(default=None, description="Is violated.")
+    justification: str = Field(default="", description="Justification.")
+
+
+class GriceanMultiTurn(BaseModel):
+    relation: GriceanMetric
+    quality: GriceanMetric
+    quantity: GriceanMetric
+    manner: GriceanMetric
+
+
+class SummaryReport(BaseModel):
+    negative_summary: List[str] = Field(default_factory=list)
+    context_retention: ContextRetention
+    gricean_multi_turn: GriceanMultiTurn
+    goal_progression: int = Field(default=-1, description="Conversation goal progression score.")
+    memory_coherence: float = Field(default=-1, description="Memory coherence score.")
+    diagnostic_summary: str = Field(default="", description="Diagnostic summary.")
+
+
+class SummaryResult(BaseModel):
+    output: SummaryReport | None = Field(default=None, description="Evaluation result")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Evaluation metadata")
 
 
 def set_by_path(obj: Dict, path: str, value: Any) -> None:
@@ -99,13 +128,14 @@ def calculate_average_scores(scores: Dict[str, Union[List[float], float]]) -> Di
     return result
 
 
+# TODO-0: Move to the evaluator module.
 @MonitoringAspect.monitor(name="summarization", category=MetricType.API_CALL)
 def summarize_verdicts(
         interaction_summaries: List[str],
         verdicts: List[str],
         judge: str,
         max_bullets: int = 5
-) -> List[str]:
+) -> SummaryResult:
     client_registry = ClientRegistry()
     client = client_registry.get(provider=judge)
 
@@ -122,38 +152,43 @@ def summarize_verdicts(
 
         response = client.call(message=prompt)
         parsed = client.parse_response(response=response)
-        # striped = parsed.get("output", "").strip("")
-        # bullet_points = [point.strip() for point in striped.split("- ") if point.strip()]
+        result = SummaryResult.model_validate(parsed)
 
-        return parsed
+        return result
+
+    except ValidationError as e:
+        logger.error(f"[summarize_verdicts] Error in validating the Pydantic model:\n{e}\n---", exc_info=True)
+        return SummaryResult()
 
     except Exception as e:
-        logger.error(f"[summarize_justifications] Error during summarization: {str(e)}", exc_info=True)
-        return []
+        logger.error(f"[summarize_justifications] Error during summarization:\n{str(e)}\n---", exc_info=True)
+        return SummaryResult()
 
 
 if __name__ == '__main__':
-    interaction_summaries = [
+
+
+    interaction_summaries_ = [
         "[T0][A][task=Information Query][s=3.0][e=0.80][g=0]] Facts: [The agent provided comprehensive information and invited further questions., All key points covered]",
         "[T1][A][task=Service Transaction][s=3.0][e=0.80][g=0]] Facts: [The AGENT response precisely matches the expected reply., Exact match, The agent's reply is identical to the expected reply, perfectly confirming the surgical appointment requested by the user.]",
         "[T2][A][task=Information Query][s=3.0][e=0.80][g=0]] Facts: [The agent's reply closely matches the expected reply with precise information., Accurate and sufficient]"
     ]
 
-    judge = "gemini"
+    judge_ = "gemini"
 
-    verdicts = [
+    verdicts_ = [
         "The AGENT's reply fully matches and addresses the user's inquiry.",
         "The agent's reply matches the expected confirmation of the appointment.",
         "The AGENT's reply matches the EXPECTED response perfectly."
     ]
 
-    max_bullets = 5
+    max_bullets_ = 5
 
     summary = summarize_verdicts(
-        interaction_summaries=interaction_summaries,
-        judge=judge,
-        verdicts=verdicts,
-        max_bullets=max_bullets
+        interaction_summaries=interaction_summaries_,
+        judge=judge_,
+        verdicts=verdicts_,
+        max_bullets=max_bullets_
     )
 
-    print(summary)
+    print(f"Evaluation Summary:\n{summary.model_dump_json(indent=2)}\n\n")

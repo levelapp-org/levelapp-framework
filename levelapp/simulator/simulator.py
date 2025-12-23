@@ -143,7 +143,8 @@ class ConversationSimulator(BaseProcess):
                 for judge, verdicts in attempt.evaluation_verdicts.items():
                     batch_verdicts[judge].extend(verdicts)
 
-        verdict_summaries: Dict[str, List[str]] = {
+        # TODO-1: Change type to 'Dict[str, SummaryResult]
+        verdict_summaries: Dict[str, Any] = {
             judge: summarize_verdicts(
                 interaction_summaries=interaction_summaries,
                 verdicts=verdicts,
@@ -235,6 +236,7 @@ class ConversationSimulator(BaseProcess):
             collected_scores: Dict[str, List[Any]] = defaultdict(list)
             collected_verdicts: Dict[str, List[str]] = defaultdict(list)
 
+            # TODO-2: Refactor into a separate method 'collect_evaluation_data'.
             for interaction in interaction_results:
                 if not interaction.evaluation_results:
                     continue
@@ -581,8 +583,6 @@ class ConversationSimulator(BaseProcess):
         if not judge_results:
             logger.warning(f"{_LOG} No judge results. Using defaults for TurnSummary.")
             return TurnSummary(turn_index=turn_index, role="A", score=0, engagement=0, gricean_violations=0)
-
-        providers = list(judge_results.keys())
 
         # 1. Aggregate scalar scores:
         scores = [jr.score for jr in judge_results.values()]
