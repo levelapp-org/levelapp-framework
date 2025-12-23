@@ -83,7 +83,7 @@ class IonosClient(BaseChatClient):
             ],
             "temperature": self.temperature,
             "top_p": self.top_p,
-            "max_completion_tokens": self.max_tokens
+            "max_tokens": self.max_tokens
         }
 
     def parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
