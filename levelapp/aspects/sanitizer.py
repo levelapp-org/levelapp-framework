@@ -1,6 +1,7 @@
 """'levelapp/aspects/sanitizers.py'"""
 import re
 import json
+from json import JSONDecodeError
 from typing import Dict, Any, Callable
 
 
@@ -149,7 +150,13 @@ class JSONSanitizer:
         Returns:
             String with code fences removed.
         """
-        return re.sub(r"^(```[a-zA-Z]*\n?)$", "", text.strip(), flags=re.MULTILINE)
+        pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
+        match = re.search(pattern, text)
+
+        if match:
+            return match.group(1).strip()
+
+        return text.strip()
 
     def safe_load_json(self, text: str) -> Dict[str, Any]:
         """
@@ -161,8 +168,14 @@ class JSONSanitizer:
         Returns:
             Parsed JSON as a dictionary, or empty dict on failure.
         """
+        cleaned_text = self.strip_code_fences(text)
+
         try:
-            return json.loads(text.strip())
+            return json.loads(cleaned_text)
 
         except json.JSONDecodeError:
-            return self.sanitize(data=text)
+            fallback_match = re.search(r"(\{[\s\S]*})", cleaned_text)
+            if fallback_match:
+                return json.loads(fallback_match.group(1))
+
+        return self.sanitize(data=text)
