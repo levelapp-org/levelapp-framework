@@ -50,6 +50,13 @@ class EndpointConfig(BaseModel):
 
 
 @dataclass
+class ClientResult:
+    success: bool
+    response: httpx.Response | None = None
+    error: Exception | None = None
+
+
+@dataclass
 class APIClient:
     """HTTP client for REST API interactions"""
     config: EndpointConfig
@@ -129,75 +136,34 @@ class APIClient:
             self,
             payload: Dict[str, Any] | None = None,
             query_params: Dict[str, Any] | None = None,
-            attempt: int = 1
     ) -> httpx.Response:
         headers = self._build_headers()
 
-        start = time.monotonic()
-        try:
-            response = await asyncio.wait_for(
-                self.client.request(
+        async with self.semaphore:
+            response = await self.client.request(
                     method=self.config.method.value,
                     url=self.config.path,
                     json=payload,
                     params=query_params,
                     headers=headers,
-                ),
-                timeout=self.config.read_timeout + self.config.write_timeout,
-            )
-            elapsed = time.monotonic() - start
-            self.logger.info(
-                "[APIClient] request.success",
-                extra={
-                    "endpoint": self.config.name,
-                    "attempt": attempt,
-                    "elapsed_ms": round(elapsed * 1000, 2),
-                    "status_code": response.status_code,
-                }
-            )
+                )
 
             if response.is_error:
-                self.logger.warning(
-                    "[APIClient] request.http_error",
-                    extra={
-                        "endpoint": self.config.name,
-                        "attempt": attempt,
-                        "status_code": response.status_code,
-                        "elapsed_ms": round(elapsed * 1000, 2),
-                    }
-                )
                 response.raise_for_status()
 
             return response
-
-        except httpx.PoolTimeout as exc:
-            raise ClientOverloadError("Connection pool exhausted") from exc
-
-        except httpx.ReadTimeout as exc:
-            raise ServerTimeoutError("Server read timeout") from exc
-
-        except httpx.ConnectTimeout as exc:
-            raise NetworkError("Connection timeout") from exc
-
-        except httpx.WriteTimeout as exc:
-            raise NetworkError("Request write timeout") from exc
-
-        except httpx.RequestError as exc:
-            raise NetworkError(str(exc)) from exc
 
     async def execute(
             self,
             payload: Dict[str, Any] | None = None,
             query_params: Dict[str, Any] | None = None,
-    ) -> httpx.Response:
-        """Execute asynchronous REST API request with retry logic."""
+    ) -> ClientResult:
         """
         Execute asynchronous REST API request with retry logic using backoff.
 
         Retries on transient errors with exponential backoff and jitter.
         Non-retryable errors (pool exhaustion, HTTP errors) are raised immediately.
         """
-        # Create retry decorator dynamically with instance configuration
         @backoff.on_exception(
             backoff.expo,
             self.RETRYABLE_ERRORS,
@@ -211,10 +177,12 @@ class APIClient:
         async def _execute_with_retry() -> httpx.Response:
             return await self.send_request(payload=payload, query_params=query_params)
 
-        async with self.semaphore:
-            try:
-                return await _execute_with_retry()
+        try:
+            response = await _execute_with_retry()
+            return ClientResult(success=True, response=response)
 
-            except self.RETRYABLE_ERRORS as exc:
-                # Transform to our custom exception after retries exhausted
-                raise NetworkError(f"Failed after {self.config.retry_count} retries: {exc}") from exc
+        except httpx.HTTPStatusError as exc:
+            return ClientResult(success=False, error=exc)
+
+        except Exception as exc:
+            return ClientResult(success=False, error=exc)
