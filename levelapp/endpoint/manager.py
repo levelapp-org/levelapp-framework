@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from levelapp.endpoint.schemas import ResponseMappingConfig
 from levelapp.endpoint.tester import ConnectivityTester
-from levelapp.endpoint.client import EndpointConfig, APIClient
+from levelapp.endpoint.client import EndpointConfig, APIClient, ClientResult
 from levelapp.endpoint.parsers import RequestPayloadBuilder, ResponseDataExtractor
 
 
@@ -66,7 +66,7 @@ class EndpointConfigManager:
             endpoint_config: EndpointConfig,
             context: Dict[str, Any],
             contextual_mode: bool = False
-    ) -> httpx.Response:
+    ) -> ClientResult:
         payload_builder = RequestPayloadBuilder()
         client = APIClient(config=endpoint_config)
 
@@ -79,7 +79,7 @@ class EndpointConfigManager:
         async with client:
             response = await client.execute(payload=context)
 
-        self.logger.info(f"Response status: {response.status_code}")
+        self.logger.info(f"Response status: {response.error}")
 
         return response
 

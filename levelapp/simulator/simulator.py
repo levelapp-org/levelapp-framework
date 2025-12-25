@@ -55,8 +55,6 @@ class ConversationSimulator(BaseProcess):
         self.endpoint_cm = EndpointConfigManager()
 
         self.test_batch: ScriptsBatch | None = None
-        self.evaluation_verdicts: Dict[str, List[str]] = defaultdict(list)
-        self.verdict_summaries: Dict[str, List[str]] = defaultdict(list)
 
     def setup(
             self,
@@ -117,7 +115,7 @@ class ConversationSimulator(BaseProcess):
         Args:
             test_batch (ScriptsBatch): Scenario batch object.
             attempts (int): Number of attempts to run the simulation.
-            max_concurrency (int): Maximum number of concurrent attempts.
+            max_concurrency (int): Maximum number of concurrent processes to run the simulation.
 
         Returns:
             Dict[str, Any]: The results of the batch test.
@@ -185,12 +183,10 @@ class ConversationSimulator(BaseProcess):
 
         async def run_script(script: ConversationScript) -> AllAttemptsResults:
             async with semaphore:
-                return await self.simulate_single_script(
-                    script=script, attempts=attempts
-                )
+                return await self.simulate_single_scenario(script=script, attempts=attempts)
 
-        script_tasks = [run_script(script=script) for script in self.test_batch.scripts]
-        script_results: List[AllAttemptsResults] = await asyncio.gather(*script_tasks)
+        scripts_tasks = [run_script(script=script) for script in self.test_batch.scripts]
+        script_results: List[AllAttemptsResults] = await asyncio.gather(*scripts_tasks)
 
         aggregate_scores: Dict[str, List[float]] = defaultdict(list)
 
@@ -203,10 +199,11 @@ class ConversationSimulator(BaseProcess):
 
         return {"script_results": script_results, "average_scores": overall_average_scores}
 
-    async def simulate_single_script(
-        self, script: ConversationScript,
-            attempts: int = 1
-    ) -> Dict[str, Any] | AllAttemptsResults:
+    async def simulate_single_scenario(
+        self,
+        script: ConversationScript,
+        attempts: int = 1
+    ) -> AllAttemptsResults:
         """
         Simulate a single scenario with the given number of attempts, concurrently.
 
@@ -215,7 +212,7 @@ class ConversationSimulator(BaseProcess):
             attempts (int): Number of attempts to run the simulation.
 
         Returns:
-            Dict[str, Any]: The results of the scenario simulation.
+            AllAttemptsResults: The results of the scenario simulation attempts.
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.simulate_single_script.__name__}]"
         logger.info(f"{_LOG} Starting simulation for script: {script.id}")
@@ -312,7 +309,7 @@ class ConversationSimulator(BaseProcess):
             attempt_id (str): The id of the attempt.
 
         Returns:
-            List[Dict[str, Any]]: The results of the inbound interactions simulation.
+            List[SingleInteractionResults]: The results of the inbound interactions simulation.
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.simulate_interactions.__name__}]"
 
@@ -349,32 +346,33 @@ class ConversationSimulator(BaseProcess):
 
             mappings = self.endpoint_config.response_mapping
 
-            response = await self.endpoint_cm.send_request(
+            client_response = await self.endpoint_cm.send_request(
                 endpoint_config=self.endpoint_config,
                 context=request_payload,
                 contextual_mode=contextual_mode
             )
 
-            logger.info(f"{_LOG} Response:\n[{response}]\n---")
+            logger.info(f"{_LOG} Response:\n[{client_response.response}]\n---")
 
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata
             reference_guardrail_flag: bool = interaction.guardrail_flag
 
-            if not response or response.status_code != 200:
-                logger.error(f"{_LOG} Interaction request failed.")
+            if not client_response.response or client_response.response.status_code != 200:
+                logger.error(
+                    f"{_LOG} Interaction request failed [{client_response.error}]:\n{client_response.response}\n---"
+                )
                 output: SingleInteractionResults = SingleInteractionResults(
                     conversation_id=attempt_id,
                     user_message=user_message,
                     reference_reply=reference_reply,
                     reference_metadata=reference_metadata,
-
                 )
                 results.append(output)
                 continue
 
             interaction_details = self.endpoint_cm.extract_response_data(
-                response=response,
+                response=client_response.response,
                 mappings=mappings,
             )
 

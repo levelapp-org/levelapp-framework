@@ -117,6 +117,26 @@ class SingleInteractionResults(BaseModel):
     turn_summary: TurnSummary | None = Field(default=None)
 
 
+
+class InteractionEvaluationResults(BaseModel):
+    """Model representing the evaluation result of an interaction."""
+    judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(default_factory=dict)
+    metadata_evaluation: Dict[str, float] | None = Field(default_factory=dict)
+    guardrail_flag: int | None = Field(default=None)
+
+
+class SingleInteractionResults(BaseModel):
+    """Represents metadata extracted from VLA interaction."""
+    conversation_id: str = Field(description="Conversation identifier")
+    user_message: str = Field(default="", description="The user's query message")
+    generated_reply: str = Field(default="Interaction request failed", description="The generated reply message")
+    reference_reply: str = Field(default="", description="The preset reference message")
+    generated_metadata: Dict[str, Any] = Field(default_factory=dict, description="Extracted metadata")
+    reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
+    guardrail_details: bool | None = Field(default=None, description="Flag for guardrail signaling")
+    evaluation_results: InteractionEvaluationResults = Field(default_factory=InteractionEvaluationResults)
+
+
 class SingleAttemptResults(BaseModel):
     attempt_nbr: int = Field(default=1, description="The attempt number")
     attempt_id: str = Field(default=None, description="The attempt ID")
@@ -128,7 +148,6 @@ class SingleAttemptResults(BaseModel):
     interaction_summaries: List[str] = Field(default_factory=list)
 
 
-# TODO-1: Change to 'ConversationResults'.
 class AllAttemptsResults(BaseModel):
     script_id: str = Field(default=None, description="The script ID")
     attempts: List[SingleAttemptResults] = Field(default_factory=list)
@@ -142,7 +161,7 @@ class SimulationResults(BaseModel):
     # Collected Results
     evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
     average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
-    script_results: Any | None = Field(default_factory=list, description="detailed results")
+    script_results: List[AllAttemptsResults] | None = Field(default_factory=list, description="detailed results")
 
     @computed_field
     @property
