@@ -179,6 +179,7 @@ class APIClient:
 
         try:
             response = await _execute_with_retry()
+            response.raise_for_status()
             return ClientResult(success=True, response=response)
 
         except httpx.HTTPStatusError as exc:
