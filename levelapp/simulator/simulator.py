@@ -106,7 +106,7 @@ class ConversationSimulator(BaseProcess):
         self,
         test_batch: ScriptsBatch,
         attempts: int = 1,
-        max_concurrency: int = 4
+        batch_size: int = 4
     ) -> Any:
         """
         Run a batch test for the given batch name and details.
@@ -114,18 +114,18 @@ class ConversationSimulator(BaseProcess):
         Args:
             test_batch (ScriptsBatch): Scenario batch object.
             attempts (int): Number of attempts to run the simulation.
-            max_concurrency (int): Maximum number of concurrent processes to run the simulation.
+            batch_size (int): Maximum number of concurrent processes to run the simulation.
 
         Returns:
             Dict[str, Any]: The results of the batch test.
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.run.__name__}]"
-        logger.info(f"{_LOG} Starting batch test (attempts: {attempts}).")
+        logger.info(f"{_LOG} Starting batch test [attempts:{attempts}][batch-size:{batch_size}].")
 
         started_at = datetime.now()
 
         self.test_batch = test_batch
-        conversation_results = await self.simulate_conversation(attempts=attempts, max_concurrency=max_concurrency)
+        conversation_results = await self.simulate_conversation(attempts=attempts, max_concurrency=batch_size)
 
         finished_at = datetime.now()
 
@@ -300,7 +300,7 @@ class ConversationSimulator(BaseProcess):
         """
         _LOG: str = f"[{self._CLASS_NAME}][{self.simulate_interactions.__name__}]"
 
-        logger.info(f"{_LOG} Starting interactions simulation..")
+        logger.info(f"{_LOG} Starting interactions simulation [ConvId:{attempt_id}]..")
         start_time = time.time()
 
         results = []
@@ -329,8 +329,6 @@ class ConversationSimulator(BaseProcess):
                 request_payload.update({"user_message": user_message})
                 logger.info(f"{_LOG} Request payload (Configured Request Schema):\n{request_payload}\n---")
 
-            logger.info(f"{_LOG} Conversation ID: {attempt_id}")
-
             mappings = self.endpoint_config.response_mapping
 
             client_response = await self.endpoint_cm.send_request(
@@ -339,7 +337,9 @@ class ConversationSimulator(BaseProcess):
                 contextual_mode=contextual_mode
             )
 
-            logger.info(f"{_LOG} Response:\n[{client_response.response}]\n---")
+            logger.info(
+                f"{_LOG} Response [{client_response.response.status_code}]:\n{client_response.response.text}\n---"
+            )
 
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata

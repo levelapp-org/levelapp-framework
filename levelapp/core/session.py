@@ -188,9 +188,7 @@ class EvaluationSession:
         # Instantiate workflow if not already
         if not self.workflow:
             if not self.workflow_config:
-                raise ValueError(
-                    f"{self._NAME}: Workflow configuration must be provided"
-                )
+                raise ValueError(f"{self._NAME}: Workflow configuration must be provided")
 
             context_builder = WorkflowContextBuilder(self.workflow_config)
             context = context_builder.build()
@@ -217,9 +215,7 @@ class EvaluationSession:
 
         return False
 
-    def step(
-        self, step_name: str, category: MetricType = MetricType.CUSTOM
-    ) -> StepContext:
+    def step(self, step_name: str, category: MetricType = MetricType.CUSTOM) -> StepContext:
         """Create a monitored evaluation step."""
         return StepContext(self, step_name, category)
 
@@ -296,13 +292,13 @@ class EvaluationSession:
             Dictionary mapping format to file path
 
         Example:
-            >>> with EvaluationSession("my-eval", config) as session:
-            ...     session.run()
-            ...     files = session.visualize_results(
-            ...         output_dir="./reports",
-            ...         formats=["html", "png"]
-            ...     )
-            ...     print(f"Dashboard: {files['html']}")
+            with EvaluationSession("my-eval", config) as session:
+                session.run()
+                files = session.visualize_results(
+                    output_dir="./reports",
+                    formats=["html", "png"]
+                )
+                print(f"Dashboard: {files['html']}")
         """
         if formats is None:
             formats = ["html"]

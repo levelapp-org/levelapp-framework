@@ -176,8 +176,9 @@ class SimulatorWorkflow(BaseWorkflow):
             raise RuntimeError(f"[{self.name}] Validation error: {e}")
 
         attempts = context.config.process.evaluation_params.get("attempts", 1)
+        batch_size = context.config.process.evaluation_params.get("batch_size", 5)
 
-        return {"test_batch": scripts_batch, "attempts": attempts}
+        return {"test_batch": scripts_batch, "attempts": attempts, "batch_size": batch_size}
 
 
 class ComparatorWorkflow(BaseWorkflow):
