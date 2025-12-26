@@ -182,7 +182,9 @@ class APIClient:
             return ClientResult(success=True, response=response)
 
         except httpx.HTTPStatusError as exc:
-            return ClientResult(success=False, error=exc)
+            exc_response = exc.response if hasattr(exc, "response") else None
+            return ClientResult(success=False, response=exc_response, error=exc)
 
         except Exception as exc:
-            return ClientResult(success=False, error=exc)
+            exc_response = exc.response if hasattr(exc, "response") else None
+            return ClientResult(success=False, response=exc_response, error=exc)
