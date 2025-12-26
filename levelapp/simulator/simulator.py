@@ -367,7 +367,7 @@ class ConversationSimulator(BaseProcess):
                     user_message=user_message,
                     reference_reply=reference_reply,
                     reference_metadata=reference_metadata,
-                    errors={"error": str(client_response.error), "context": client_response.response}
+                    errors={"error": str(client_response.error), "context": str(client_response.response)}
                 )
                 results.append(output)
                 continue
