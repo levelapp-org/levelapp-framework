@@ -337,10 +337,6 @@ class ConversationSimulator(BaseProcess):
                 contextual_mode=contextual_mode
             )
 
-            logger.info(
-                f"{_LOG} Response [{client_response.response.status_code}]:\n{client_response.response.text}\n---"
-            )
-
             reference_reply = interaction.reference_reply
             reference_metadata = interaction.reference_metadata
             reference_guardrail_flag: bool = interaction.guardrail_flag
@@ -354,9 +350,14 @@ class ConversationSimulator(BaseProcess):
                     user_message=user_message,
                     reference_reply=reference_reply,
                     reference_metadata=reference_metadata,
+                    errors={"error": str(client_response.error), "context": client_response.response}
                 )
                 results.append(output)
                 continue
+
+            logger.info(
+                f"{_LOG} Response [{client_response.response.status_code}]:\n{client_response.response.text}\n---"
+            )
 
             interaction_details = self.endpoint_cm.extract_response_data(
                 response=client_response.response,
@@ -497,9 +498,9 @@ class ConversationSimulator(BaseProcess):
         for provider, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
                 logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation.")
-                continue
-
-            evaluation_results.judge_evaluations[provider] = result
+                evaluation_results.errors = {"provider": provider, "content": str(result)}
+            else:
+                evaluation_results.judge_evaluations[provider] = result
 
     def _metadata_evaluation(
             self,
@@ -526,3 +527,4 @@ class ConversationSimulator(BaseProcess):
             )
         except Exception as e:
             logger.error(f"{_LOG} Metadata evaluation failed:\n{e}", exc_info=e)
+            evaluation_results.errors = {"errors": e}

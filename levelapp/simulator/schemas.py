@@ -62,6 +62,7 @@ class InteractionEvaluationResults(BaseModel):
     judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(default_factory=dict)
     metadata_evaluation: Dict[str, float] | None = Field(default_factory=dict)
     guardrail_flag: int | None = Field(default=None)
+    errors: Dict[str, Any] | None = Field(default_factory=dict)
 
 
 class SingleInteractionResults(BaseModel):
@@ -74,6 +75,7 @@ class SingleInteractionResults(BaseModel):
     reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
     guardrail_details: bool | None = Field(default=None, description="Flag for guardrail signaling")
     evaluation_results: InteractionEvaluationResults = Field(default_factory=InteractionEvaluationResults)
+    errors: Dict[str, Any] = Field(default_factory=dict, description="Captured errors")
 
 
 class SingleAttemptResults(BaseModel):
