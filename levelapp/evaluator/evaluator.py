@@ -1,4 +1,5 @@
 """levelapp/core/evaluator.py"""
+
 from functools import lru_cache
 from typing import List, Dict, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
@@ -24,28 +25,40 @@ if TYPE_CHECKING:
 
 class Evidence(BaseModel):
     """Evidence details for evaluation."""
+
     covered_points: List[str] = Field(
         default_factory=list,
-        description="Key points covered the agent reply covered (<= 3 items)"
+        description="Key points covered the agent reply covered (<= 3 items)",
     )
     missing_or_wrong: List[str] = Field(
         default_factory=list,
-        description="Key points the agent reply missed or contradicted (<= 3 items)"
+        description="Key points the agent reply missed or contradicted (<= 3 items)",
     )
 
 
 class JudgeEvaluationResults(BaseModel):
     """Structured result of an interaction evaluation."""
+
     provider: str = Field(..., description="The provider name, e.g., 'openai', 'ionos'")
     score: int = Field(..., ge=0, le=3, description="Evaluation score between 0 and 3")
     label: str = Field(..., description="The label of the evaluation result")
-    justification: str = Field(..., description="Short explanation of the evaluation result")
-    evidence: Evidence = Field(default_factory=Evidence, description="Detailed evidence for the evaluation")
-    raw_response: Dict[str, Any] = Field(..., description="Full unprocessed API response", exclude=True)
-    metadata: Dict[str, Any] = Field(..., description="Metadata about the evaluation result")
+    justification: str = Field(
+        ..., description="Short explanation of the evaluation result"
+    )
+    evidence: Evidence = Field(
+        default_factory=Evidence, description="Detailed evidence for the evaluation"
+    )
+    raw_response: Dict[str, Any] = Field(
+        default_factory=dict, description="Full unprocessed API response", exclude=True
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Metadata about the evaluation result"
+    )
 
     @classmethod
-    def from_parsed(cls, provider: str, parsed: Dict[str, Any], raw: Dict[str, Any]) -> "JudgeEvaluationResults":
+    def from_parsed(
+        cls, provider: str, parsed: Dict[str, Any], raw: Dict[str, Any]
+    ) -> "JudgeEvaluationResults":
         """
         Build a model instance from the provided data.
 
@@ -72,6 +85,7 @@ class JudgeEvaluationResults(BaseModel):
 
 class JudgeEvaluator(BaseEvaluator):
     """LLM-as-a-judge evaluator class"""
+
     def __init__(self, config: "WorkflowConfig | None" = None):
         """
         Initialize the JudgeEvaluator.
@@ -97,13 +111,17 @@ class JudgeEvaluator(BaseEvaluator):
             client (BaseChatClient): The LLM client to use for the evaluation.
         """
         if provider not in self.client_registry.list_providers():
-            logger.warning(f"[JudgeEvaluator] {provider} is not registered. Defaulting to 'OpenAI'.")
+            logger.warning(
+                f"[JudgeEvaluator] {provider} is not registered. Defaulting to 'OpenAI'."
+            )
             return self.client_registry.get(provider="openai")
 
         return self.client_registry.get(provider=provider)
 
     @lru_cache(maxsize=1024)
-    def _build_prompt(self, user_input: str, generated_text: str, reference_text: str) -> str:
+    def _build_prompt(
+        self, user_input: str, generated_text: str, reference_text: str
+    ) -> str:
         """
         Build the prompt used for the evaluation.
 
@@ -118,7 +136,7 @@ class JudgeEvaluator(BaseEvaluator):
         return self.prompt_template.format(
             user_input=user_input,
             generated_text=generated_text,
-            reference_text=reference_text
+            reference_text=reference_text,
         )
 
     @retry(
@@ -128,11 +146,11 @@ class JudgeEvaluator(BaseEvaluator):
         reraise=True,
     )
     def evaluate(
-            self,
-            generated_data: str,
-            reference_data: str,
-            user_input: str,
-            provider: str,
+        self,
+        generated_data: str,
+        reference_data: str,
+        user_input: str,
+        provider: str,
     ) -> JudgeEvaluationResults | None:
         """
         Synchronous evaluation for the generated data.
@@ -152,7 +170,7 @@ class JudgeEvaluator(BaseEvaluator):
         prompt = self._build_prompt(
             user_input=user_input,
             generated_text=generated_data,
-            reference_text=reference_data
+            reference_text=reference_data,
         )
         client = self.select_client(provider=provider)
 
@@ -160,7 +178,13 @@ class JudgeEvaluator(BaseEvaluator):
             response = client.call(message=prompt)
             logger.info(f"[{provider}] Evaluation: {response}\n{'---' * 10}")
             parsed = client.parse_response(response=response)
-            return JudgeEvaluationResults.from_parsed(provider=provider, parsed=parsed, raw=response)
+            # Add model name to metadata
+            if "metadata" not in parsed:
+                parsed["metadata"] = {}
+            parsed["metadata"]["model"] = getattr(client, "model", provider)
+            return JudgeEvaluationResults.from_parsed(
+                provider=provider, parsed=parsed, raw=response
+            )
 
         except Exception as e:
             logger.error(f"[{provider}] Evaluation failed: {e}", exc_info=True)
@@ -171,16 +195,16 @@ class JudgeEvaluator(BaseEvaluator):
                 justification="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
                 raw_response={},
-                metadata={}
+                metadata={},
             )
 
     @MonitoringAspect.monitor(name="judge_evaluation", category=MetricType.API_CALL)
     async def async_evaluate(
-            self,
-            generated_data: str,
-            reference_data: str,
-            user_input: str,
-            provider: str,
+        self,
+        generated_data: str,
+        reference_data: str,
+        user_input: str,
+        provider: str,
     ) -> JudgeEvaluationResults | None:
         """
         Synchronous evaluation for the generated data.
@@ -200,7 +224,7 @@ class JudgeEvaluator(BaseEvaluator):
         prompt = self._build_prompt(
             user_input=user_input,
             generated_text=generated_data,
-            reference_text=reference_data
+            reference_text=reference_data,
         )
         client = self.select_client(provider=provider)
 
@@ -214,10 +238,19 @@ class JudgeEvaluator(BaseEvaluator):
                 with attempt:
                     response = await client.acall(message=prompt)
                     parsed = client.parse_response(response=response)
-                    return JudgeEvaluationResults.from_parsed(provider=provider, parsed=parsed, raw=response)
+                    # Add model name to metadata
+                    if "metadata" not in parsed:
+                        parsed["metadata"] = {}
+                    parsed["metadata"]["model"] = getattr(client, "model", provider)
+                    return JudgeEvaluationResults.from_parsed(
+                        provider=provider, parsed=parsed, raw=response
+                    )
 
         except RetryError as e:
-            logger.error(f"[{provider}] Async evaluation failed after retries: {e}", exc_info=True)
+            logger.error(
+                f"[{provider}] Async evaluation failed after retries: {e}",
+                exc_info=True,
+            )
             return JudgeEvaluationResults(
                 provider=provider,
                 score=0,
@@ -225,12 +258,13 @@ class JudgeEvaluator(BaseEvaluator):
                 justification="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
                 raw_response={},
-                metadata={}
+                metadata={},
             )
 
 
 class MetadataEvaluator(BaseEvaluator):
     """Metadata evaluator class."""
+
     def __init__(self, config: "WorkflowConfig | None" = None):
         """
         Initialize the MetadataEvaluator.
@@ -247,10 +281,10 @@ class MetadataEvaluator(BaseEvaluator):
         self.metrics_manager = MetricsManager()
 
     def evaluate(
-            self,
-            generated_data: str | Dict[str, Any],
-            reference_data: str | Dict[str, Any],
-            metrics_mapping: Any | None = None,
+        self,
+        generated_data: str | Dict[str, Any],
+        reference_data: str | Dict[str, Any],
+        metrics_mapping: Any | None = None,
     ) -> Dict[str, float]:
         """
         Synchronous evaluation for the generated data.
@@ -263,8 +297,12 @@ class MetadataEvaluator(BaseEvaluator):
         Returns:
               A dict containing the evaluation results.
         """
-        gen_data = self.data_loader.create_dynamic_model(data=generated_data, model_name="GeneratedMetadata")
-        ref_data = self.data_loader.create_dynamic_model(data=reference_data, model_name="ReferenceMetadata")
+        gen_data = self.data_loader.create_dynamic_model(
+            data=generated_data, model_name="GeneratedMetadata"
+        )
+        ref_data = self.data_loader.create_dynamic_model(
+            data=reference_data, model_name="ReferenceMetadata"
+        )
 
         if metrics_mapping:
             self.comparator.metrics_manager = metrics_mapping
@@ -298,10 +336,10 @@ class MetadataEvaluator(BaseEvaluator):
         return results
 
     async def async_evaluate(
-            self,
-            generated_data: str | Dict[str, Any],
-            reference_data: str | Dict[str, Any],
-            **kwargs
+        self,
+        generated_data: str | Dict[str, Any],
+        reference_data: str | Dict[str, Any],
+        **kwargs,
     ):
         """Not implemented yet."""
         raise NotImplementedError()

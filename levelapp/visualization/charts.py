@@ -39,14 +39,21 @@ class ChartGenerator:
 
         fig = go.Figure()
 
-        # Extract scores by provider
+        # Extract scores by provider and get model names
         provider_scores = defaultdict(list)
+        provider_models = {}
         script_ids = []
 
         if results.script_results:
             for idx, script_result in enumerate(results.script_results):
                 script_id = script_result.script_id
                 script_ids.append(script_id)
+
+                # Get provider_models mapping from the first attempt if available
+                if script_result.attempts and hasattr(
+                    script_result.attempts[0], "provider_models"
+                ):
+                    provider_models.update(script_result.attempts[0].provider_models)
 
                 avg_scores = script_result.average_scores
                 for provider, score in avg_scores.items():
@@ -59,12 +66,15 @@ class ChartGenerator:
 
         # Create line for each provider
         for idx, (provider, scores) in enumerate(provider_scores.items()):
+            # Use model name if available, otherwise use provider name
+            display_name = provider_models.get(provider, provider).upper()
+
             fig.add_trace(
                 go.Scatter(
                     x=script_ids[: len(scores)],
                     y=scores,
                     mode="lines+markers",
-                    name=provider.upper(),
+                    name=display_name,
                     line=dict(
                         width=2,
                         color=self._color_palette[idx % len(self._color_palette)],
@@ -100,11 +110,23 @@ class ChartGenerator:
 
         providers = []
         scores = []
+        provider_models = {}
+
+        # Extract provider_models mapping from script results
+        if results.script_results:
+            for script_result in results.script_results:
+                if script_result.attempts and hasattr(
+                    script_result.attempts[0], "provider_models"
+                ):
+                    provider_models.update(script_result.attempts[0].provider_models)
+                    break  # Only need one mapping
 
         if results.average_scores:
             for provider, score in results.average_scores.items():
                 if provider not in ["processing_time", "guardrail", "metadata"]:
-                    providers.append(provider.upper())
+                    # Use model name if available, otherwise use provider name
+                    display_name = provider_models.get(provider, provider).upper()
+                    providers.append(display_name)
                     scores.append(score)
 
         fig = go.Figure(
@@ -120,8 +142,8 @@ class ChartGenerator:
         )
 
         fig.update_layout(
-            title="Average Scores by Provider",
-            xaxis_title="Provider",
+            title="Average Scores by Model",
+            xaxis_title="Model",
             yaxis_title="Average Score",
             template=self.theme,
             yaxis=dict(range=[0, 1]),
@@ -307,7 +329,7 @@ class ChartGenerator:
         from plotly.subplots import make_subplots
 
         # Calculate summary metrics
-        total_scripts = len(results.interaction_results or [])
+        total_scripts = len(results.script_results or [])
         avg_score = (
             results.average_scores.get("openai", 0) if results.average_scores else 0
         )
