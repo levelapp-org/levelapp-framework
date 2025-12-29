@@ -265,9 +265,7 @@ class ConversationSimulator(BaseProcess):
 
             average_scores = calculate_average_scores(collected_scores)
 
-            logger.info(
-                f"{_LOG} Attempt {attempt_number + 1} completed in {elapsed_time:.2f}s\n---"
-            )
+            average_scores = calculate_average_scores(collected_scores)
 
             return SingleAttemptResults(
                 attempt_nbr=attempt_number + 1,
