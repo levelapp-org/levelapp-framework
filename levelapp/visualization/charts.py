@@ -43,12 +43,12 @@ class ChartGenerator:
         provider_scores = defaultdict(list)
         script_ids = []
 
-        if results.interaction_results:
-            for idx, script_result in enumerate(results.interaction_results):
-                script_id = script_result.get("script_id", f"Script {idx + 1}")
+        if results.script_results:
+            for idx, script_result in enumerate(results.script_results):
+                script_id = script_result.script_id
                 script_ids.append(script_id)
 
-                avg_scores = script_result.get("average_scores", {})
+                avg_scores = script_result.average_scores
                 for provider, score in avg_scores.items():
                     if (
                         provider != "processing_time"

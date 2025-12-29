@@ -1,7 +1,5 @@
 """levelapp/endpoint/client.py"""
 import os
-import time
-
 import httpx
 import asyncio
 import backoff
@@ -11,7 +9,6 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
 
-from levelapp.endpoint.exceptions import ClientOverloadError, ServerTimeoutError, NetworkError
 from levelapp.endpoint.schemas import HttpMethod, HeaderConfig, RequestSchemaConfig, ResponseMappingConfig
 
 
