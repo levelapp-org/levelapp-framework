@@ -4,6 +4,7 @@ levelapp/simulator/schemas.py
 Defines Pydantic models for simulator-related data structures,
 including test configurations, batch metadata, and evaluation results.
 """
+
 from enum import Enum
 from uuid import UUID, uuid4
 from datetime import datetime
@@ -16,6 +17,7 @@ from levelapp.evaluator.evaluator import JudgeEvaluationResults
 
 class InteractionLevel(str, Enum):
     """Enum representing the type of interaction."""
+
     INITIAL = "initial"
     INTERMEDIATE = "intermediate"
     FINAL = "final"
@@ -23,34 +25,59 @@ class InteractionLevel(str, Enum):
 
 class Interaction(BaseModel):
     """Represents a single interaction within a conversation."""
+
     id: UUID = Field(default_factory=uuid4, description="Interaction identifier")
-    user_message_path: str = Field(..., description="Path of the user message in the request payload")
+    user_message_path: str = Field(
+        ..., description="Path of the user message in the request payload"
+    )
     user_message: str = Field(..., description="The user's query message")
     reference_reply: str = Field(..., description="The preset reference message")
-    interaction_type: InteractionLevel = Field(default=InteractionLevel.INITIAL, description="Type of interaction")
-    reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
-    guardrail_flag: Any = Field(default=False, description="Flag for guardrail signaling")
-    request_payload: Dict[str, Any] = Field(default_factory=dict, description="Additional request payload")
+    interaction_type: InteractionLevel = Field(
+        default=InteractionLevel.INITIAL, description="Type of interaction"
+    )
+    reference_metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Expected metadata"
+    )
+    guardrail_flag: Any = Field(
+        default=False, description="Flag for guardrail signaling"
+    )
+    request_payload: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional request payload"
+    )
 
 
 class ConversationScript(BaseModel):
     """Represents a basic conversation with multiple interactions."""
+
     id: UUID = Field(default_factory=uuid4, description="Conversation identifier")
-    interactions: List[Interaction] = Field(default_factory=list, description="List of interactions")
-    description: str = Field(default="no-description", description="A short description of the conversation")
-    details: Dict[str, str] = Field(default_factory=dict, description="Conversation details")
-    variable_request_schema: bool = Field(default=False, description="The payload schema changes for each request")
-    uuid_field: str | None = Field(default=None, description="field that requires a UUID value")
+    interactions: List[Interaction] = Field(
+        default_factory=list, description="List of interactions"
+    )
+    description: str = Field(
+        default="no-description", description="A short description of the conversation"
+    )
+    details: Dict[str, str] = Field(
+        default_factory=dict, description="Conversation details"
+    )
+    variable_request_schema: bool = Field(
+        default=False, description="The payload schema changes for each request"
+    )
+    uuid_field: str | None = Field(
+        default=None, description="field that requires a UUID value"
+    )
 
 
 class ScriptsBatch(BaseModel):
     id: UUID = Field(default_factory=uuid4, description="Batch identifier")
-    scripts: List[ConversationScript] = Field(default_factory=list, description="List of conversation scripts")
+    scripts: List[ConversationScript] = Field(
+        default_factory=list, description="List of conversation scripts"
+    )
 
 
 # ---- Interaction Details Models ----
 class InteractionResults(BaseModel):
     """Represents metadata extracted from a VLA interaction."""
+
     generated_reply: str | None = "No response"
     generated_metadata: Dict[str, Any] | None = {}
     guardrail_flag: Any | None = False
@@ -59,7 +86,10 @@ class InteractionResults(BaseModel):
 
 class InteractionEvaluationResults(BaseModel):
     """Model representing the evaluation result of an interaction."""
-    judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(default_factory=dict)
+
+    judge_evaluations: Dict[str, JudgeEvaluationResults] | None = Field(
+        default_factory=dict
+    )
     metadata_evaluation: Dict[str, float] | None = Field(default_factory=dict)
     guardrail_flag: int | None = Field(default=None)
     errors: Dict[str, Any] | None = Field(default_factory=dict)
@@ -67,14 +97,25 @@ class InteractionEvaluationResults(BaseModel):
 
 class SingleInteractionResults(BaseModel):
     """Represents metadata extracted from VLA interaction."""
+
     conversation_id: str = Field(description="Conversation identifier")
     user_message: str = Field(default="", description="The user's query message")
-    generated_reply: str = Field(default="Interaction request failed", description="The generated reply message")
+    generated_reply: str = Field(
+        default="Interaction request failed", description="The generated reply message"
+    )
     reference_reply: str = Field(default="", description="The preset reference message")
-    generated_metadata: Dict[str, Any] = Field(default_factory=dict, description="Extracted metadata")
-    reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
-    guardrail_details: bool | None = Field(default=None, description="Flag for guardrail signaling")
-    evaluation_results: InteractionEvaluationResults = Field(default_factory=InteractionEvaluationResults)
+    generated_metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Extracted metadata"
+    )
+    reference_metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Expected metadata"
+    )
+    guardrail_details: bool | None = Field(
+        default=None, description="Flag for guardrail signaling"
+    )
+    evaluation_results: InteractionEvaluationResults = Field(
+        default_factory=InteractionEvaluationResults
+    )
     errors: Dict[str, Any] = Field(default_factory=dict, description="Captured errors")
 
 
@@ -86,6 +127,9 @@ class SingleAttemptResults(BaseModel):
     interaction_results: List[SingleInteractionResults] = Field(default_factory=list)
     evaluation_verdicts: Dict[str, List[str]] = Field(default_factory=dict)
     average_scores: Dict[str, float] = Field(default_factory=dict)
+    provider_models: Dict[str, str] = Field(
+        default_factory=dict, description="Mapping of provider names to model names"
+    )
     interaction_summaries: List[str] = Field(default_factory=list)
 
 
@@ -100,9 +144,15 @@ class SimulationResults(BaseModel):
     started_at: datetime = datetime.now()
     finished_at: datetime
     # Collected Results
-    evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
-    average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
-    script_results: List[AllAttemptsResults] | None = Field(default_factory=list, description="detailed results")
+    evaluation_summary: Dict[str, Any] | None = Field(
+        default_factory=dict, description="Evaluation result"
+    )
+    average_scores: Dict[str, Any] | None = Field(
+        default_factory=dict, description="Average scores"
+    )
+    script_results: List[AllAttemptsResults] | None = Field(
+        default_factory=list, description="detailed results"
+    )
 
     @computed_field
     @property

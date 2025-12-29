@@ -170,7 +170,7 @@ class DashboardGenerator:
             Dictionary of summary statistics
         """
         stats = {
-            "total_scripts": len(results.interaction_results or []),
+            "total_scripts": len(results.script_results or []),
             "total_time": results.elapsed_time,
             "started_at": results.started_at.strftime("%Y-%m-%d %H:%M:%S"),
             "finished_at": results.finished_at.strftime("%Y-%m-%d %H:%M:%S"),
