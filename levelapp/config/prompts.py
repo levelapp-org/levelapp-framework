@@ -62,7 +62,7 @@ Return ONLY a single JSON object on one line with EXACTLY these keys:
 {{
   "score": <0|1|2|3>,
   "label": "<Poor|Moderate|Good|Excellent>",
-  "justification": "<1-2 sentences, ≤30 words total>",
+  "verdict": "<1-2 sentences, ≤30 words total>",
   "evidence": {{
     "covered_points": ["<≤3 short phrases>"],
     "missing_or_wrong": ["<≤3 short phrases>"]

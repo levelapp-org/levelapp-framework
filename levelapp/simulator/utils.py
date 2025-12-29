@@ -2,42 +2,12 @@
 'simulators/aspects.py': Utility functions for handling VLA interactions and requests.
 """
 from typing import Any, Dict, List, Union
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 
 from levelapp.clients import ClientRegistry
 from levelapp.config.prompts import MULTI_TURN_EVALUATION_PROMPT_TEMPLATE
 from levelapp.aspects import MonitoringAspect, MetricType, logger
-
-
-class ContextRetention(BaseModel):
-    score: float = Field(default=-1, description="Context retention score.")
-    issues: List[str] = Field(default_factory=list, description="List of identified issues.")
-
-
-class GriceanMetric(BaseModel):
-    violated: bool | None = Field(default=None, description="Is violated.")
-    justification: str = Field(default="", description="Justification.")
-
-
-class GriceanMultiTurn(BaseModel):
-    relation: GriceanMetric
-    quality: GriceanMetric
-    quantity: GriceanMetric
-    manner: GriceanMetric
-
-
-class SummaryReport(BaseModel):
-    negative_summary: List[str] = Field(default_factory=list)
-    context_retention: ContextRetention
-    gricean_multi_turn: GriceanMultiTurn
-    goal_progression: int = Field(default=-1, description="Conversation goal progression score.")
-    memory_coherence: float = Field(default=-1, description="Memory coherence score.")
-    diagnostic_summary: str = Field(default="", description="Diagnostic summary.")
-
-
-class SummaryResult(BaseModel):
-    output: SummaryReport | None = Field(default=None, description="Evaluation result")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Evaluation metadata")
+from levelapp.simulator.schemas import SummaryResults
 
 
 def set_by_path(obj: Dict, path: str, value: Any) -> None:
@@ -135,7 +105,7 @@ def summarize_verdicts(
         verdicts: List[str],
         judge: str,
         max_bullets: int = 5
-) -> SummaryResult:
+) -> SummaryResults:
     client_registry = ClientRegistry()
     client = client_registry.get(provider=judge)
 
@@ -152,17 +122,17 @@ def summarize_verdicts(
 
         response = client.call(message=prompt)
         parsed = client.parse_response(response=response)
-        result = SummaryResult.model_validate(parsed)
+        result = SummaryResults.model_validate(parsed)
 
         return result
 
     except ValidationError as e:
         logger.error(f"[summarize_verdicts] Error in validating the Pydantic model:\n{e}\n---", exc_info=True)
-        return SummaryResult()
+        return SummaryResults()
 
     except Exception as e:
         logger.error(f"[summarize_justifications] Error during summarization:\n{str(e)}\n---", exc_info=True)
-        return SummaryResult()
+        return SummaryResults()
 
 
 if __name__ == '__main__':

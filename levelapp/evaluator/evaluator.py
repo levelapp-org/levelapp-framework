@@ -12,10 +12,10 @@ from tenacity import (
 )
 
 from levelapp.clients import ClientRegistry
+from levelapp.core.base import BaseEvaluator, BaseChatClient
 from levelapp.evaluator.schemas import JudgeEvaluationResults, Evidence
 from levelapp.comparator import MetricsManager, MetadataComparator
 from levelapp.config.prompts import EVAL_PROMPT_TEMPLATE, TASK_TAXONOMY
-from levelapp.core.base import BaseEvaluator, BaseChatClient
 from levelapp.aspects import MonitoringAspect, MetricType, logger, DataLoader
 
 if TYPE_CHECKING:
@@ -125,7 +125,7 @@ class JudgeEvaluator(BaseEvaluator):
                 provider=provider,
                 score=0,
                 label="N/A",
-                justification="N/A",
+                verdict="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
                 raw_response={},
                 task_metadata=None
@@ -182,7 +182,7 @@ class JudgeEvaluator(BaseEvaluator):
                 provider=provider,
                 score=0,
                 label="N/A",
-                justification="N/A",
+                verdict="N/A",
                 evidence=Evidence(covered_points=[], missing_or_wrong=[]),
                 raw_response={},
                 task_metadata=None

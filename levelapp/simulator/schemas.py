@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field, computed_field
 
-from levelapp.evaluator.evaluator import JudgeEvaluationResults
+from levelapp.evaluator.schemas import JudgeEvaluationResults, GriceanAnalysis
 
 
 # Input DTOs:
@@ -223,7 +223,7 @@ class TurnSummary(BaseModel):
 
 # ---- Interaction Details Models ----
 class SingleInteractionResults(BaseModel):
-    """Represents metadata extracted from a VLA interaction."""
+    """Represents metadata extracted from VLA interaction."""
     conversation_id: str = Field(description="Conversation identifier")
     user_message: str = Field(default="", description="The user's query message")
     generated_reply: str = Field(default="Interaction request failed", description="The generated reply message")
@@ -233,6 +233,7 @@ class SingleInteractionResults(BaseModel):
     guardrail_details: bool | None = Field(default=None, description="Flag for guardrail signaling")
     evaluation_results: InteractionEvaluationResults = Field(default_factory=InteractionEvaluationResults)
     turn_summary: TurnSummary | None = Field(default=None)
+    errors: Dict[str, Any] = Field(default_factory=dict, description="Captured errors")
 
 
 class SingleAttemptResults(BaseModel):
@@ -246,11 +247,29 @@ class SingleAttemptResults(BaseModel):
     interaction_summaries: List[str] = Field(default_factory=list)
 
 
-# TODO-1: Change to 'ConversationResults'.
 class AllAttemptsResults(BaseModel):
     script_id: str = Field(default=None, description="The script ID")
     attempts: List[SingleAttemptResults] = Field(default_factory=list)
     average_scores: Dict[str, float] = Field(default_factory=dict)
+
+
+class ContextRetention(BaseModel):
+    score: float = Field(default=-1, description="Context retention score.")
+    issues: List[str] = Field(default_factory=list, description="List of identified issues.")
+
+
+class SummaryReport(BaseModel):
+    negative_summary: List[str] = Field(default_factory=list)
+    context_retention: ContextRetention
+    gricean_multi_turn: GriceanAnalysis
+    goal_progression: int = Field(default=-1, description="Conversation goal progression score.")
+    memory_coherence: float = Field(default=-1, description="Memory coherence score.")
+    diagnostic_summary: str = Field(default="", description="Diagnostic summary.")
+
+
+class SummaryResults(BaseModel):
+    output: SummaryReport | None = Field(default=None, description="Evaluation result")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Evaluation metadata")
 
 
 class SimulationResults(BaseModel):
@@ -260,7 +279,7 @@ class SimulationResults(BaseModel):
     # Collected Results
     evaluation_summary: Dict[str, Any] | None = Field(default_factory=dict, description="Evaluation result")
     average_scores: Dict[str, Any] | None = Field(default_factory=dict, description="Average scores")
-    script_results: Any | None = Field(default_factory=list, description="detailed results")
+    script_results: List[AllAttemptsResults] | None = Field(default_factory=list, description="detailed results")
 
     @computed_field
     @property

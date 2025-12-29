@@ -16,15 +16,18 @@ from levelapp.endpoint.manager import EndpointConfigManager
 from levelapp.core.schemas import EvaluatorType
 from levelapp.evaluator.schemas import JudgeEvaluationResults
 from levelapp.simulator.schemas import (
-    InteractionEvaluationResults,
     ScriptsBatch,
     ConversationScript,
-    SimulationResults, TurnSummary, SingleInteractionResults, SingleAttemptResults, AllAttemptsResults
+    TurnSummary,
+    SingleInteractionResults,
+    SingleAttemptResults,
+    AllAttemptsResults,
+    InteractionEvaluationResults,
+    SummaryResults,
+    SimulationResults,
 )
-from levelapp.simulator.utils import (
-    calculate_average_scores,
-    summarize_verdicts,
-)
+
+from levelapp.simulator.utils import calculate_average_scores, summarize_verdicts
 from levelapp.aspects import logger
 
 
@@ -57,10 +60,10 @@ class ConversationSimulator(BaseProcess):
         self.test_batch: ScriptsBatch | None = None
 
     def setup(
-            self,
-            endpoint_config: EndpointConfig,
-            evaluators: Dict[EvaluatorType, BaseEvaluator],
-            providers: List[str],
+        self,
+        endpoint_config: EndpointConfig,
+        evaluators: Dict[EvaluatorType, BaseEvaluator],
+        providers: List[str],
     ) -> None:
         """
         Initialize the ConversationSimulator.
@@ -141,8 +144,7 @@ class ConversationSimulator(BaseProcess):
                 for judge, verdicts in attempt.evaluation_verdicts.items():
                     batch_verdicts[judge].extend(verdicts)
 
-        # TODO-1: Change type to 'Dict[str, SummaryResult]
-        verdict_summaries: Dict[str, Any] = {
+        verdict_summaries: Dict[str, SummaryResults] = {
             judge: summarize_verdicts(
                 interaction_summaries=interaction_summaries,
                 verdicts=verdicts,
@@ -183,7 +185,7 @@ class ConversationSimulator(BaseProcess):
 
         async def run_script(script: ConversationScript) -> AllAttemptsResults:
             async with semaphore:
-                return await self.simulate_single_scenario(script=script, attempts=attempts)
+                return await self.simulate_single_script(script=script, attempts=attempts)
 
         scripts_tasks = [run_script(script=script) for script in self.test_batch.scripts]
         script_results: List[AllAttemptsResults] = await asyncio.gather(*scripts_tasks)
@@ -243,7 +245,7 @@ class ConversationSimulator(BaseProcess):
                 # Judge scores & verdicts
                 for provider, judge_result in eval_results.judge_evaluations.items():
                     collected_scores[provider].append(judge_result.score)
-                    collected_verdicts[provider].append(judge_result.justification)
+                    collected_verdicts[provider].append(judge_result.verdict)
 
                 # Metadata scores
                 if eval_results.metadata_evaluation:
@@ -348,10 +350,6 @@ class ConversationSimulator(BaseProcess):
                 endpoint_config=self.endpoint_config,
                 context=request_payload,
                 contextual_mode=contextual_mode
-            )
-
-            logger.info(
-                f"{_LOG} Response [{client_response.response.status_code}]:\n{client_response.response.text}\n---"
             )
 
             reference_reply = interaction.reference_reply
@@ -610,7 +608,7 @@ class ConversationSimulator(BaseProcess):
         # TODO-0: Change 'all_facts' to 'all_verdicts'
         all_verdicts = []
         for jr in judge_results.values():
-            all_verdicts.append(jr.justification)
+            all_verdicts.append(jr.verdict)
 
         return TurnSummary(
             turn_index=turn_index,
@@ -624,30 +622,3 @@ class ConversationSimulator(BaseProcess):
             key_facts=all_verdicts,
             guardrail_triggered=guardrail_triggered,
         )
-
-    @staticmethod
-    def store_evaluation_results(
-        results: InteractionEvaluationResults,
-        evaluation_verdicts: Dict[str, List[str]],
-        collected_scores: Dict[str, List[Any]],
-    ) -> None:
-        """
-        Store the evaluation results in the evaluation summary.
-
-        Args:
-            results (InteractionEvaluationResults): The evaluation results to store.
-            evaluation_verdicts (Dict[str, List[str]]): The evaluation summary.
-            collected_scores (Dict[str, List[Any]]): The collected scores.
-        """
-        for provider in results.judge_evaluations.keys():
-            evaluation_verdicts[f"{provider}"].append(
-                results.judge_evaluations.get(provider, "").justification
-            )
-
-            collected_scores[provider].append(results.judge_evaluations.get(provider, "").score)
-
-        average_metadata_score = calculate_average_scores(scores=results.metadata_evaluation)
-        for field, score in average_metadata_score.items():
-            collected_scores["metadata"].append(score)
-
-        collected_scores["guardrail"].append(results.guardrail_flag)
