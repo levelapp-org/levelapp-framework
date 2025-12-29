@@ -201,7 +201,7 @@ class ConversationSimulator(BaseProcess):
 
         return {"script_results": script_results, "average_scores": overall_average_scores}
 
-    async def simulate_single_scenario(
+    async def simulate_single_script(
         self,
         script: ConversationScript,
         attempts: int = 1
@@ -519,7 +519,6 @@ class ConversationSimulator(BaseProcess):
                 domain_context=domain_context,
                 generated_data=generated_reply,
                 reference_data=reference_reply,
-                domain_context=domain_context,
                 user_input=user_input,
                 provider=provider,
             )
