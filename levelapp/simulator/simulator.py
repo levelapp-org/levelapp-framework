@@ -263,7 +263,6 @@ class ConversationSimulator(BaseProcess):
             elapsed_time = time.time() - start_time
             collected_scores["processing_time"].append(elapsed_time)
 
-            average_scores = calculate_average_scores(collected_scores)
 
             average_scores = calculate_average_scores(collected_scores)
 
@@ -527,7 +526,7 @@ class ConversationSimulator(BaseProcess):
 
         for provider, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
-                logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation.")
+                logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation:\n{result}\n---")
                 evaluation_results.errors = {"provider": provider, "content": str(result)}
             else:
                 evaluation_results.judge_evaluations[provider] = result
@@ -580,7 +579,7 @@ class ConversationSimulator(BaseProcess):
 
         if not judge_results:
             logger.warning(f"{_LOG} No judge results. Using defaults for TurnSummary.")
-            return TurnSummary(turn_index=turn_index, role="A", score=0, engagement=0, gricean_violations=0)
+            return None
 
         # 1. Aggregate scalar scores:
         scores = [jr.score for jr in judge_results.values()]
