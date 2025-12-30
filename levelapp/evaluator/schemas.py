@@ -34,11 +34,7 @@ class Evidence(BaseModel):
 
 class GriceanMaximResult(BaseModel):
     violated: bool = Field(..., description="Whether this maxim was violated")
-    justification: str = Field(
-        default="",
-        max_length=120,  # ~15 words
-        description="Concise evidence (≤15 words)"
-    )
+    justification: str = Field(default="", description="Concise evidence (≤15 words)")
 
 
 class GriceanAnalysis(BaseModel):
@@ -76,7 +72,7 @@ class JudgeEvaluationResults(BaseModel):
     provider: str = Field(..., description="The provider name, e.g., 'openai', 'ionos'")
     score: int = Field(..., ge=0, le=3, description="Evaluation score between 0 and 3")
     label: str = Field(..., pattern=r"^(Poor|Moderate|Good|Excellent)$", description="evaluation results label")
-    verdict: str = Field(..., min_length=10, max_length=200, description="1-2 sentence verdict")
+    verdict: str = Field(default="", description="1-2 sentence verdict")
     evidence: Evidence = Field(default_factory=Evidence, description="Detailed evidence for the evaluation")
     raw_response: Dict[str, Any] = Field(default_factory=dict, description="Full unprocessed response")
     task_metadata: TaskMetadata | None = Field(..., description="Structured interaction metadata")

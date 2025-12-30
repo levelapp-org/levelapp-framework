@@ -114,7 +114,7 @@ class SingleInteractionResults(BaseModel):
     reference_metadata: Dict[str, Any] = Field(default_factory=dict, description="Expected metadata")
     guardrail_details: bool | None = Field(default=None, description="Flag for guardrail signaling")
     evaluation_results: InteractionEvaluationResults = Field(default_factory=InteractionEvaluationResults)
-    turn_summary: TurnSummary = Field(default=None)
+    turn_summary: TurnSummary | None = Field(default=None)
     errors: Dict[str, Any] = Field(default_factory=dict, description="Captured errors")
 
 
