@@ -372,15 +372,23 @@ class ConversationSimulator(BaseProcess):
 
             logger.info(f"{_LOG} Generated reply <ConvID:{attempt_id}>:\n{generated_reply}\n---")
 
-            evaluation_results = await self.evaluate_interaction(
-                user_input=user_message,
-                generated_reply=generated_reply,
-                reference_reply=reference_reply,
-                generated_metadata=generated_metadata,
-                reference_metadata=reference_metadata,
-                generated_guardrail=extracted_guardrail_flag,
-                reference_guardrail=reference_guardrail_flag,
-            )
+            if not reference_guardrail_flag:
+                evaluation_results = await self.evaluate_interaction(
+                    user_input=user_message,
+                    generated_reply=generated_reply,
+                    reference_reply=reference_reply,
+                    generated_metadata=generated_metadata,
+                    reference_metadata=reference_metadata,
+                    generated_guardrail=extracted_guardrail_flag,
+                    reference_guardrail=reference_guardrail_flag,
+                )
+            else:
+                evaluation_results = InteractionEvaluationResults(
+                    judge_evaluations=None,
+                    metadata_evaluation=None,
+                    guardrail_flag=None,
+                    errors={"context": "Expected guardrail flag. No evaluation was performed"}
+                )
 
             elapsed_time = time.time() - start_time
             logger.info(f"{_LOG} Interaction simulation complete in {elapsed_time:.2f} seconds.\n---")
