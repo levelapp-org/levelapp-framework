@@ -394,6 +394,7 @@ class ConversationSimulator(BaseProcess):
                 reference_metadata=reference_metadata,
                 guardrail_details=extracted_guardrail_flag,
                 evaluation_results=evaluation_results,
+                response_content=client_response.response.json(),
             )
 
             results.append(output)
