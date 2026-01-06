@@ -394,6 +394,7 @@ class ConversationSimulator(BaseProcess):
                 reference_metadata=reference_metadata,
                 guardrail_details=extracted_guardrail_flag,
                 evaluation_results=evaluation_results,
+                response_content=client_response.response.json(),
             )
 
             results.append(output)
@@ -432,7 +433,7 @@ class ConversationSimulator(BaseProcess):
 
         evaluation_results = InteractionEvaluationResults()
 
-        if judge_evaluator and self.providers:
+        if judge_evaluator and self.providers and not reference_guardrail:
             await self._judge_evaluation(
                 user_input=user_input,
                 generated_reply=generated_reply,
@@ -442,9 +443,12 @@ class ConversationSimulator(BaseProcess):
                 evaluation_results=evaluation_results,
             )
         else:
-            logger.info(f"{_LOG} Judge evaluation skipped (no evaluator or no providers).")
+            if not generated_guardrail:
+                logger.info(f"{_LOG} Judge evaluation disabled. Guardrail flag: [{generated_guardrail}].")
+            else:
+                logger.info(f"{_LOG} Judge evaluation skipped (no evaluator or no providers).")
 
-        if metadata_evaluator and reference_metadata:
+        if metadata_evaluator and reference_metadata and not reference_guardrail:
             self._metadata_evaluation(
                 metadata_evaluator=metadata_evaluator,
                 generated_metadata=generated_metadata,
@@ -452,7 +456,10 @@ class ConversationSimulator(BaseProcess):
                 evaluation_results=evaluation_results,
             )
         else:
-            logger.info(f"{_LOG} Metadata evaluation skipped (no evaluator or no reference metadata).")
+            if not generated_guardrail:
+                logger.info(f"{_LOG} Metadata evaluation disabled. Guardrail flag: [{generated_guardrail}].")
+            else:
+                logger.info(f"{_LOG} Metadata evaluation skipped (no evaluator or no reference metadata).")
 
         evaluation_results.guardrail_flag = 1 if generated_guardrail == reference_guardrail else 0
 
