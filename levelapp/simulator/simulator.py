@@ -449,7 +449,7 @@ class ConversationSimulator(BaseProcess):
             else:
                 logger.info(f"{_LOG} Judge evaluation skipped (no evaluator or no providers).")
 
-        if similarity_evaluator:
+        if similarity_evaluator and not reference_guardrail:
             await self._similarity_evaluation(
                 generated_reply=generated_reply,
                 reference_reply=reference_reply,
@@ -457,7 +457,10 @@ class ConversationSimulator(BaseProcess):
                 evaluation_results=evaluation_results,
             )
         else:
-            logger.info(f"{_LOG} Similarity evaluation skipped (no evaluator).")
+            if not generated_guardrail:
+                logger.info(f"{_LOG} Similarity evaluation disabled. Guardrail flag: [{generated_guardrail}].")
+            else:
+                logger.info(f"{_LOG} Similarity evaluation skipped (no evaluator).")
 
         if metadata_evaluator and reference_metadata and not reference_guardrail:
             self._metadata_evaluation(
@@ -516,7 +519,7 @@ class ConversationSimulator(BaseProcess):
         for provider, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
                 logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation.")
-                evaluation_results.errors = {"provider": provider, "content": str(result)}
+                evaluation_results.errors = {"provider": provider, "context": str(result)}
             else:
                 evaluation_results.judge_evaluations[provider] = result
 
@@ -541,12 +544,17 @@ class ConversationSimulator(BaseProcess):
         """
         _LOG: str = f"[{self._CLASS_NAME}][SimilarityEvaluation]"
 
-        results = await similarity_evaluator.async_evaluate(
-            reference_data=reference_reply,
-            generated_data=generated_reply,
-        )
+        try:
+            results = await similarity_evaluator.async_evaluate(
+                reference_data=reference_reply,
+                generated_data=generated_reply,
+            )
 
-        evaluation_results.similarity_evaluation = results
+            evaluation_results.similarity_evaluation = results
+
+        except Exception as e:
+            logger.error(f"{_LOG} Similarity evaluation failed:\n{e}", exc_info=e)
+            evaluation_results.errors = {"error": str(e)}
 
     def _metadata_evaluation(
             self,
@@ -571,6 +579,7 @@ class ConversationSimulator(BaseProcess):
                 generated_data=generated_metadata,
                 reference_data=reference_metadata,
             )
+
         except Exception as e:
             logger.error(f"{_LOG} Metadata evaluation failed:\n{e}", exc_info=e)
-            evaluation_results.errors = {"errors": e}
+            evaluation_results.errors = {"error": str(e)}
