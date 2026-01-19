@@ -21,4 +21,5 @@ class RepositoryType(ExtendedEnum):
 class EvaluatorType(ExtendedEnum):
     JUDGE = "JUDGE"
     REFERENCE = "REFERENCE"
+    SIMILARITY = "SIMILARITY"
     RAG = "RAG"

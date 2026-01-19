@@ -8,7 +8,7 @@ from levelapp.workflow.runtime import WorkflowContext
 from levelapp.core.schemas import EvaluatorType, RepositoryType
 
 from levelapp.repository.firestore import FirestoreRepository
-from levelapp.evaluator.evaluator import JudgeEvaluator, MetadataEvaluator
+from levelapp.evaluator.evaluator import JudgeEvaluator, MetadataEvaluator, SimilarityEvaluator
 
 
 class WorkflowContextBuilder:
@@ -27,6 +27,7 @@ class WorkflowContextBuilder:
         self.evaluator_map: Dict[EvaluatorType, Callable[[WorkflowConfig], BaseEvaluator]] = {
             EvaluatorType.JUDGE: lambda cfg: JudgeEvaluator(config=cfg),
             EvaluatorType.REFERENCE: lambda cfg: MetadataEvaluator(config=cfg),
+            EvaluatorType.SIMILARITY: lambda cfg: SimilarityEvaluator(config=cfg),
         }
 
     def build(self) -> WorkflowContext:

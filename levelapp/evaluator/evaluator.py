@@ -1,8 +1,12 @@
 """levelapp/core/evaluator.py"""
+import threading
+
 from functools import lru_cache
 from typing import List, Dict, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -305,3 +309,130 @@ class MetadataEvaluator(BaseEvaluator):
     ):
         """Not implemented yet."""
         raise NotImplementedError()
+
+
+class SimilarityEvaluator(BaseEvaluator):
+    """
+    Evaluator that computes semantic similarity between generated and reference text
+    using Sentence-Transformers and Cosine Similarity.
+    """
+    _model_lock = threading.Lock()
+    _similarity_model = None
+
+    def __init__(self, config: "WorkflowConfig | None" = None):
+        """
+        Initialize the SimilarityEvaluator.
+
+        Args:
+            config (WorkflowConfig | None): The workflow configuration.
+        """
+        if config:
+            self.config = config
+
+        self.model_name = "all-MiniLM-L6-v2"
+        self.warmup()
+
+    @classmethod
+    def _load_model(cls, model_name: str) -> SentenceTransformer:
+        """
+        Thread-safe lazy loader for the Sentence-Transformer model.
+        Implements the warm-up pattern: model loads on first use.
+
+        Args:
+            model_name (str): The name of the Sentence-Transformer model.
+
+        Returns:
+            SentenceTransformer: Loaded model instance.
+        """
+        if cls._similarity_model is None:
+            with cls._model_lock:
+                if cls._similarity_model is None:
+                    logger.info(
+                        f"[SimilarityEvaluator] Downloading and preparing Sentence-Transformer model '{model_name}'..."
+                        f"This might take a moment..."
+                    )
+                    cls._similarity_model = SentenceTransformer(model_name)
+                    logger.info(f"[SimilarityEvaluator] Model '{model_name}' is ready.")
+
+        return cls._similarity_model
+
+    def warmup(self) -> None:
+        """
+        Explicit warm-up method to load the model before evaluation.
+        """
+        logger.info("[SimilarityEvaluator] Warming up...")
+        self._load_model(self.model_name)
+        logger.info("[SimilarityEvaluator] Model loaded.")
+
+    def evaluate(
+            self,
+            generated_data: str,
+            reference_data: str,
+            **kwargs
+    ) -> Dict[str, float]:
+        """
+        Compute semantic similarity between generated and reference text.
+
+        Args:
+            generated_data (str): The generated text reply.
+            reference_data (str): The reference text reply.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Dict[str, float]: A dictionary with single key 'semantic_similarity' score (0.0-1.0).
+        """
+        model = self._load_model(self.model_name)
+
+        try:
+            embeddings = model.encode([generated_data, reference_data])
+            gen_embedding = embeddings[0].reshape(1, -1)
+            ref_embedding = embeddings[1].reshape(1, -1)
+
+            similarity_score = cosine_similarity(gen_embedding, ref_embedding)
+
+            return {"semantic_similarity": float(similarity_score.item())}
+
+        except RuntimeError as e:
+            logger.error(f"[SimilarityEvaluator] Failed to compute semantic similarity:\n{e}\n---", exc_info=True)
+            return {"semantic_similarity": -1.0}
+
+        except Exception as e:
+            logger.error(f"[SimilarityEvaluator] Evaluation failed:\n{e}\n---", exc_info=True)
+            return {"semantic_similarity": -1.0}
+
+    async def async_evaluate(
+            self,
+            generated_data: str,
+            reference_data: str,
+            **kwargs
+    ) -> Dict[str, float]:
+        """
+        Async version of evaluate. Since encoding is CPU-bounded and the model isn't async-native,
+        we run the synchronous 'evaluate' method in a thread pool.
+
+        Args:
+            generated_data (str): The generated text reply.
+            reference_data (str): The reference text reply.
+            **kwargs: Additional keyword arguments.
+        """
+        import asyncio
+        loop = asyncio.get_event_loop()
+
+        return await loop.run_in_executor(
+            None,
+            lambda: self.evaluate(generated_data, reference_data, **kwargs)
+        )
+
+
+if __name__ == '__main__':
+    import asyncio
+
+    generated_text = "Yes, we recommend completing any necessary paperwork before your appointment to ensure a smooth visit. You can usually find the forms on our website or we can provide them when you arrive."
+    reference_text = "Yes, we recommend completing any necessary paperwork before your appointment to ensure a smooth visit. You can usually find the forms on our website or arrive a bit early to fill them out at the clinic."
+
+    similarity_evaluator = SimilarityEvaluator()
+    similarity_evaluator.warmup()
+    res = asyncio.run(
+        similarity_evaluator.async_evaluate(generated_data=generated_text, reference_data=reference_text)
+    )
+    print(f"Evaluation results: {res}")

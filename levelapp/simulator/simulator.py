@@ -6,8 +6,7 @@ import asyncio
 
 from datetime import datetime
 from collections import defaultdict
-from typing import Dict, Any, List
-
+from typing import Dict, Any, List, Tuple
 
 from levelapp.core.base import BaseProcess, BaseEvaluator
 from levelapp.endpoint.client import EndpointConfig
@@ -225,28 +224,7 @@ class ConversationSimulator(BaseProcess):
                 attempt_id=attempt_id,
             )
 
-            collected_scores: Dict[str, List[Any]] = defaultdict(list)
-            collected_verdicts: Dict[str, List[Any]] = defaultdict(list)
-
-            for interaction in interaction_results:
-                if not interaction.evaluation_results:
-                    continue
-
-                eval_results = interaction.evaluation_results
-
-                # Judge scores & verdicts
-                for provider, judge_result in eval_results.judge_evaluations.items():
-                    collected_scores[provider].append(judge_result.score)
-                    collected_verdicts[provider].append(judge_result.justification)
-
-                # Metadata scores
-                if eval_results.metadata_evaluation:
-                    for _, score in eval_results.metadata_evaluation.items():
-                        collected_scores["metadata"].append(score)
-
-                # Guardrail
-                if eval_results.guardrail_flag is not None:
-                    collected_scores["guardrail"].append(eval_results.guardrail_flag)
+            collected_scores, collected_verdicts = self._collect_evaluation_data(results=interaction_results)
 
             elapsed_time = time.time() - start_time
             collected_scores["processing_time"].append(elapsed_time)
@@ -430,6 +408,7 @@ class ConversationSimulator(BaseProcess):
 
         judge_evaluator: BaseEvaluator | None = self.evaluators.get(EvaluatorType.JUDGE, None)
         metadata_evaluator: BaseEvaluator | None = self.evaluators.get(EvaluatorType.REFERENCE, None)
+        similarity_evaluator: BaseEvaluator | None = self.evaluators.get(EvaluatorType.SIMILARITY, None)
 
         evaluation_results = InteractionEvaluationResults()
 
@@ -447,6 +426,19 @@ class ConversationSimulator(BaseProcess):
                 logger.info(f"{_LOG} Judge evaluation disabled. Guardrail flag: [{generated_guardrail}].")
             else:
                 logger.info(f"{_LOG} Judge evaluation skipped (no evaluator or no providers).")
+
+        if similarity_evaluator and not reference_guardrail:
+            await self._similarity_evaluation(
+                generated_reply=generated_reply,
+                reference_reply=reference_reply,
+                similarity_evaluator=similarity_evaluator,
+                evaluation_results=evaluation_results,
+            )
+        else:
+            if not generated_guardrail:
+                logger.info(f"{_LOG} Similarity evaluation disabled. Guardrail flag: [{generated_guardrail}].")
+            else:
+                logger.info(f"{_LOG} Similarity evaluation skipped (no evaluator).")
 
         if metadata_evaluator and reference_metadata and not reference_guardrail:
             self._metadata_evaluation(
@@ -505,9 +497,42 @@ class ConversationSimulator(BaseProcess):
         for provider, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
                 logger.error(f"{_LOG} Provider '{provider}' failed to perform Judge Evaluation.")
-                evaluation_results.errors = {"provider": provider, "content": str(result)}
+                evaluation_results.errors = {"provider": provider, "context": str(result)}
             else:
                 evaluation_results.judge_evaluations[provider] = result
+
+    async def _similarity_evaluation(
+            self,
+            generated_reply: str,
+            reference_reply: str,
+            similarity_evaluator: BaseEvaluator,
+            evaluation_results: InteractionEvaluationResults,
+    ) -> None:
+        """
+        Run a Semantic Similarity evaluation.
+
+        Args:
+            generated_reply (str): The generated agent reply.
+            reference_reply (str): The reference agent reply.
+            similarity_evaluator (BaseEvaluator): Evaluator instance.
+            evaluation_results (InteractionEvaluationResults): Results container.
+
+        Returns:
+            None
+        """
+        _LOG: str = f"[{self._CLASS_NAME}][SimilarityEvaluation]"
+
+        try:
+            results = await similarity_evaluator.async_evaluate(
+                reference_data=reference_reply,
+                generated_data=generated_reply,
+            )
+
+            evaluation_results.similarity_evaluation = results
+
+        except Exception as e:
+            logger.error(f"{_LOG} Similarity evaluation failed:\n{e}", exc_info=e)
+            evaluation_results.errors = {"error": str(e)}
 
     def _metadata_evaluation(
             self,
@@ -532,6 +557,45 @@ class ConversationSimulator(BaseProcess):
                 generated_data=generated_metadata,
                 reference_data=reference_metadata,
             )
+
         except Exception as e:
             logger.error(f"{_LOG} Metadata evaluation failed:\n{e}", exc_info=e)
-            evaluation_results.errors = {"errors": e}
+            evaluation_results.errors = {"error": str(e)}
+
+    @staticmethod
+    def _collect_evaluation_data(
+            results: List[SingleInteractionResults]
+    ) -> Tuple[Dict[str, List], Dict[str, List]]:
+        """
+        Helper method for collecting the evaluation data on the attempt level.
+
+        Args:
+            results (List[SingleInteractionResults]): The results of all interactions for a single attempt.
+
+        Returns:
+            A tuple containing two dicts: collected scores and collected verdicts.
+        """
+        collected_scores = defaultdict(list)
+        collected_verdicts = defaultdict(list)
+
+        for interaction in results:
+            eval_results = interaction.evaluation_results
+
+            if not eval_results:
+                continue
+
+            # Judge scores & verdicts
+            for provider, judge_result in eval_results.judge_evaluations.items():
+                collected_scores[provider].append(judge_result.score)
+                collected_verdicts[provider].append(judge_result.justification)
+
+            # Metadata scores
+            if eval_results.metadata_evaluation:
+                for _, score in eval_results.metadata_evaluation.items():
+                    collected_scores["metadata"].append(score)
+
+            # Guardrail
+            if eval_results.guardrail_flag is not None:
+                collected_scores["guardrail"].append(eval_results.guardrail_flag)
+
+        return collected_scores, collected_verdicts
