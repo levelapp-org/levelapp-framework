@@ -6,8 +6,7 @@ import asyncio
 
 from datetime import datetime
 from collections import defaultdict
-from typing import Dict, Any, List
-
+from typing import Dict, Any, List, Tuple
 
 from levelapp.core.base import BaseProcess, BaseEvaluator
 from levelapp.endpoint.client import EndpointConfig
@@ -225,28 +224,7 @@ class ConversationSimulator(BaseProcess):
                 attempt_id=attempt_id,
             )
 
-            collected_scores: Dict[str, List[Any]] = defaultdict(list)
-            collected_verdicts: Dict[str, List[Any]] = defaultdict(list)
-
-            for interaction in interaction_results:
-                if not interaction.evaluation_results:
-                    continue
-
-                eval_results = interaction.evaluation_results
-
-                # Judge scores & verdicts
-                for provider, judge_result in eval_results.judge_evaluations.items():
-                    collected_scores[provider].append(judge_result.score)
-                    collected_verdicts[provider].append(judge_result.justification)
-
-                # Metadata scores
-                if eval_results.metadata_evaluation:
-                    for _, score in eval_results.metadata_evaluation.items():
-                        collected_scores["metadata"].append(score)
-
-                # Guardrail
-                if eval_results.guardrail_flag is not None:
-                    collected_scores["guardrail"].append(eval_results.guardrail_flag)
+            collected_scores, collected_verdicts = self._collect_evaluation_data(results=interaction_results)
 
             elapsed_time = time.time() - start_time
             collected_scores["processing_time"].append(elapsed_time)
@@ -583,3 +561,41 @@ class ConversationSimulator(BaseProcess):
         except Exception as e:
             logger.error(f"{_LOG} Metadata evaluation failed:\n{e}", exc_info=e)
             evaluation_results.errors = {"error": str(e)}
+
+    @staticmethod
+    def _collect_evaluation_data(
+            results: List[SingleInteractionResults]
+    ) -> Tuple[Dict[str, List], Dict[str, List]]:
+        """
+        Helper method for collecting the evaluation data on the attempt level.
+
+        Args:
+            results (List[SingleInteractionResults]): The results of all interactions for a single attempt.
+
+        Returns:
+            A tuple containing two dicts: collected scores and collected verdicts.
+        """
+        collected_scores = defaultdict(list)
+        collected_verdicts = defaultdict(list)
+
+        for interaction in results:
+            eval_results = interaction.evaluation_results
+
+            if not eval_results:
+                continue
+
+            # Judge scores & verdicts
+            for provider, judge_result in eval_results.judge_evaluations.items():
+                collected_scores[provider].append(judge_result.score)
+                collected_verdicts[provider].append(judge_result.justification)
+
+            # Metadata scores
+            if eval_results.metadata_evaluation:
+                for _, score in eval_results.metadata_evaluation.items():
+                    collected_scores["metadata"].append(score)
+
+            # Guardrail
+            if eval_results.guardrail_flag is not None:
+                collected_scores["guardrail"].append(eval_results.guardrail_flag)
+
+        return collected_scores, collected_verdicts
